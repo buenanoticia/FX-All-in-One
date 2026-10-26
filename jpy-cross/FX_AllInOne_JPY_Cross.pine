@@ -1,0 +1,788 @@
+//@version=6
+// FX All-in-One Pro — JPY Cross v1.0.0 / 2026-10-26
+// Forked from USDJPY v1.1.1. The USDJPY file is not modified.
+// Supported: EURJPY / GBPJPY / AUDJPY / NZDJPY / CADJPY / CHFJPY.
+// One chart symbol at a time; not a multi-symbol scanner.
+// MA + S/R + Dow + Elliott candidates + Granville candidates + distance reference.
+// INDICATOR ONLY: no broker orders, no position sync, no actual trailing stop.
+// Original source: TradingViewAllInOneScript10161026-0030.txt
+indicator("FX All-in-One Pro JPY Cross v1.0.0", shorttitle="JC 1.0.0", overlay=true, max_lines_count=100, max_labels_count=500, dynamic_requests=true)
+
+// v1.1.1: S/Rの過去座標描画は、内部でtime系列の履歴を参照します。
+// srLookbackの上限4900本（境界を含む）をカバーするため、timeだけを事前確保します。
+// 全系列の一括拡張や、探索期間・売買条件の変更は行いません。
+max_bars_back(time, 5000)
+
+// 銘柄名の部分一致ではなく、FX種別・基軸通貨・決済通貨で対象を確認。
+// USDJPYは既存の専用版を使用。非円ペアや未定義のクロス円には適用しない。
+bool isSupportedBase = syminfo.basecurrency == "EUR" or syminfo.basecurrency == "GBP" or syminfo.basecurrency == "AUD" or syminfo.basecurrency == "NZD" or syminfo.basecurrency == "CAD" or syminfo.basecurrency == "CHF"
+bool isSupportedCross = syminfo.type == "forex" and syminfo.currency == "JPY" and isSupportedBase
+if barstate.isfirst
+    if not isSupportedCross
+        runtime.error("クロス円版の対象はEURJPY・GBPJPY・AUDJPY・NZDJPY・CADJPY・CHFJPYです。USDJPYは専用版、NOKSEK等は別版が必要です。")
+    if not chart.is_standard or timeframe.isticks
+        runtime.error("通常の時間足チャートで使用してください。平均足・レンジ・Renko・ティック足等は対象外です。")
+
+string pairCode = syminfo.basecurrency + syminfo.currency
+string pairLabel = syminfo.basecurrency + "/" + syminfo.currency
+// 対象6ペアは1pip=0.01円。mintick（価格の最小刻み）とは区別する。
+float pipSize = 0.01
+bool confirmed = barstate.isconfirmed
+
+f_one(float value) =>
+    na(value) ? "取得不可" : str.tostring(value, "0.0")
+
+f_tfLabel(simple string tf) =>
+    float seconds = timeframe.in_seconds(tf)
+    seconds < 60 ? str.tostring(seconds, "0") + "秒" : seconds < 3600 ? str.tostring(seconds / 60, "0") + "分" : seconds < 86400 ? str.tostring(seconds / 3600, "0.#") + "時間" : tf
+
+// ───────── 1. 移動平均線 ─────────
+grpMA   = "1. 移動平均線"
+showMA  = input.bool(true, "移動平均線を表示", group=grpMA)
+maType  = input.string("EMA", "種類", options=["EMA", "SMA"], group=grpMA)
+len1    = input.int(20,  "短期 (押し目・戻り目基準)", minval=1, group=grpMA, inline="m1")
+col1    = input.color(color.orange, "", group=grpMA, inline="m1")
+len2    = input.int(75,  "中期 (トレンド方向基準)", minval=1, group=grpMA, inline="m2")
+col2    = input.color(color.blue, "", group=grpMA, inline="m2")
+len3    = input.int(200, "長期 (大局フィルター)", minval=1, group=grpMA, inline="m3")
+col3    = input.color(color.purple, "", group=grpMA, inline="m3")
+
+f_ma(source, length, kind) =>
+    kind == "EMA" ? ta.ema(source, length) : ta.sma(source, length)
+
+ma1 = f_ma(close, len1, maType)
+ma2 = f_ma(close, len2, maType)
+ma3 = f_ma(close, len3, maType)
+
+plot(showMA ? ma1 : na, "MA短期", color=col1, linewidth=1)
+plot(showMA ? ma2 : na, "MA中期", color=col2, linewidth=2)
+plot(showMA ? ma3 : na, "MA長期", color=col3, linewidth=3)
+
+// ───────── 2. 水平線（サポート・レジスタンス） ─────────
+grpSR      = "2. 水平線（サポート・レジスタンス）"
+srShow     = input.bool(true, "水平線を表示", group=grpSR)
+srPivot    = input.int(10, "高値・安値の判定（左右の本数）", minval=2, maxval=100, group=grpSR)
+srLookback = input.int(300, "探索期間（本）", minval=50, maxval=4900, group=grpSR)
+srMinTouch = input.int(3, "最小タッチ回数", minval=2, maxval=100, group=grpSR)
+srTolATR   = input.float(0.5, "同じ価格帯とみなす幅（ATR倍）", minval=0.05, step=0.05, group=grpSR)
+srMaxLines = input.int(6, "表示する最大本数", minval=1, maxval=20, group=grpSR)
+srResColor = input.color(color.red, "現在値より上（レジスタンス）", group=grpSR)
+srSupColor = input.color(color.green, "現在値より下（サポート）", group=grpSR)
+
+atrSR = ta.atr(50)
+atr14 = ta.atr(14)
+srPH  = ta.pivothigh(high, srPivot, srPivot)
+srPL  = ta.pivotlow(low, srPivot, srPivot)
+
+var array<float> srPrices = array.new<float>()
+var array<int>   srBars   = array.new<int>()
+
+if confirmed and not na(srPH)
+    array.push(srPrices, srPH)
+    array.push(srBars, bar_index - srPivot)
+if confirmed and not na(srPL)
+    array.push(srPrices, srPL)
+    array.push(srBars, bar_index - srPivot)
+
+while array.size(srBars) > 0 and array.get(srBars, 0) < bar_index - srLookback
+    array.shift(srBars)
+    array.shift(srPrices)
+
+var array<line>  srLines  = array.new<line>()
+var array<label> srLabels = array.new<label>()
+
+if barstate.islast
+    while array.size(srLines) > 0
+        line.delete(array.pop(srLines))
+    while array.size(srLabels) > 0
+        label.delete(array.pop(srLabels))
+
+    n = array.size(srPrices)
+    if srShow and n > 0 and not na(atrSR)
+        tol    = atrSR * srTolATR
+        idx    = array.sort_indices(srPrices, order.ascending)
+        cPrice = array.new<float>()
+        cCount = array.new<int>()
+        cFirst = array.new<int>()
+        acc      = 0.0
+        cnt      = 0
+        firstBar = 0
+
+        for i = 0 to n - 1
+            k = array.get(idx, i)
+            p = array.get(srPrices, k)
+            b = array.get(srBars, k)
+            if cnt == 0
+                acc      := p
+                cnt      := 1
+                firstBar := b
+            else if p - (acc / cnt) <= tol
+                acc      += p
+                cnt      += 1
+                firstBar := math.min(firstBar, b)
+            else
+                array.push(cPrice, acc / cnt)
+                array.push(cCount, cnt)
+                array.push(cFirst, firstBar)
+                acc      := p
+                cnt      := 1
+                firstBar := b
+        if cnt > 0
+            array.push(cPrice, acc / cnt)
+            array.push(cCount, cnt)
+            array.push(cFirst, firstBar)
+
+        ordIdx = array.sort_indices(cCount, order.descending)
+        drawn  = 0
+        if array.size(ordIdx) > 0
+            for j = 0 to array.size(ordIdx) - 1
+                ci = array.get(ordIdx, j)
+                c  = array.get(cCount, ci)
+                if c >= srMinTouch and drawn < srMaxLines
+                    y   = array.get(cPrice, ci)
+                    col = y > close ? srResColor : srSupColor
+                    array.push(srLines, line.new(array.get(cFirst, ci), y, bar_index, y, extend=extend.right, color=col, width=2))
+                    array.push(srLabels, label.new(bar_index + 3, y, str.tostring(y, format.mintick) + "（" + str.tostring(c) + "回）", style=label.style_label_lower_left, color=color.new(col, 85), textcolor=col, size=size.small))
+                    drawn += 1
+
+// ───────── 3. ダウ理論 ＆ エリオット波動候補 ─────────
+// ピボットの右側dowLen本が確定してから更新する簡易カウント。
+// Elliottの全パターン・全規則を証明するエンジンではありません。
+grpDow      = "3. ダウ理論 ＆ エリオット波動候補"
+dowShow     = input.bool(true, "ダウ理論を表示", group=grpDow)
+dowLen      = input.int(5, "スイング高安の判定（左右の本数）", minval=2, maxval=100, group=grpDow)
+dowMode     = input.string("切り上げ・切り下げ重視", "トレンド終了の基準", options=["切り上げ・切り下げ重視", "押し安値・戻り高値重視"], group=grpDow)
+dowLabels   = input.bool(true, "HH / HL / LH / LL / EH / EL ラベル", group=grpDow)
+elliottShow = input.bool(true, "エリオット波動候補ラベル", group=grpDow, tooltip="確定ピボットによる簡易候補です。3原則の完全検証、勝率や期待値の保証ではありません。")
+labelsAtPivot = input.bool(false, "ラベルを過去のピボット位置へ戻して表示", group=grpDow, tooltip="OFFでは判明した足に表示。ONではdowLen本前へ描画しますが、その時点で知ることができたサインではありません。")
+dowLine     = input.bool(true, "トレンド終了ライン（注文ではない）", group=grpDow)
+dowBg       = input.bool(true, "トレンド背景色", group=grpDow)
+upColor     = input.color(color.teal, "上昇の色", group=grpDow)
+dnColor     = input.color(color.rgb(255, 82, 82), "下降の色", group=grpDow)
+
+dPH = ta.pivothigh(high, dowLen, dowLen)
+dPL = ta.pivotlow(low, dowLen, dowLen)
+bool newSwing = confirmed and (not na(dPH) or not na(dPL))
+bool dualPivot = not na(dPH) and not na(dPL)
+int pivotBar = bar_index - dowLen
+
+var float lastH = na
+var float prevH = na
+var float lastL = na
+var float prevL = na
+var int lastHBar = na
+var int prevHBar = na
+var int lastLBar = na
+var int prevLBar = na
+var float oshiL = na
+var float modoriH = na
+var int trend = 0
+
+// 0=待機, 1=1波終点候補/2波調整, 2=2波終点候補/3波推進,
+// 3=3波終点候補/4波調整, 4=4波終点候補/5波推進, 5=5波終点候補
+var int waveCount = 0
+var int waveDir = 0
+var int wavePivotBar = na
+var float w0Price = na
+var float w1Price = na
+var float w2Price = na
+var float w3Price = na
+var float w4Price = na
+var float w5Price = na
+
+bool waveInvalid = false
+string highWaveTag = ""
+string lowWaveTag = ""
+
+if confirmed and not na(dPH)
+    prevH := lastH
+    prevHBar := lastHBar
+    lastH := dPH
+    lastHBar := pivotBar
+    bool isHH = not na(prevH) and lastH > prevH
+    bool isLH = not na(prevH) and lastH < prevH
+    bool laterWavePivot = na(wavePivotBar) or pivotBar > wavePivotBar
+
+    if isHH and not na(lastL) and lastLBar < lastHBar
+        oshiL := lastL
+
+    // 高安が同じバーで同時に確定した場合、波の順序を仮定しない。
+    if not dualPivot and laterWavePivot
+        if isHH
+            if (waveDir != 1 or waveCount == 0 or waveCount == 5) and not na(lastL) and lastLBar < lastHBar and lastH > lastL
+                waveDir := 1
+                waveCount := 1
+                wavePivotBar := pivotBar
+                w0Price := lastL
+                w1Price := lastH
+                w2Price := na
+                w3Price := na
+                w4Price := na
+                w5Price := na
+                highWaveTag := " [1W候補]"
+            else if waveDir == 1 and waveCount == 1
+                w1Price := lastH
+                wavePivotBar := pivotBar
+                highWaveTag := " [1W延長候補]"
+            else if waveDir == 1 and waveCount == 2 and lastH > w1Price
+                waveCount := 3
+                w3Price := lastH
+                wavePivotBar := pivotBar
+                highWaveTag := " [3W候補]"
+            else if waveDir == 1 and waveCount == 3 and lastH > w3Price
+                w3Price := lastH
+                wavePivotBar := pivotBar
+                highWaveTag := " [3W延長候補]"
+            else if waveDir == 1 and waveCount == 4 and lastH > w3Price
+                float lenW1 = w1Price - w0Price
+                float lenW3 = w3Price - w2Price
+                float lenW5 = lastH - w4Price
+                if lenW3 < lenW1 and lenW3 < lenW5
+                    waveInvalid := true
+                else
+                    waveCount := 5
+                    w5Price := lastH
+                    wavePivotBar := pivotBar
+                    highWaveTag := " [5W候補]"
+        else if isLH
+            if waveDir == -1 and waveCount == 1
+                if lastH < w0Price and lastH > w1Price
+                    waveCount := 2
+                    w2Price := lastH
+                    wavePivotBar := pivotBar
+                    highWaveTag := " [2W候補]"
+                else
+                    waveInvalid := true
+            else if waveDir == -1 and waveCount == 3
+                if lastH < w1Price and lastH > w3Price
+                    waveCount := 4
+                    w4Price := lastH
+                    wavePivotBar := pivotBar
+                    highWaveTag := " [4W候補]"
+                else
+                    waveInvalid := true
+
+    if dowMode == "切り上げ・切り下げ重視" and trend == 1 and isLH
+        trend := 0
+
+if confirmed and not na(dPL)
+    prevL := lastL
+    prevLBar := lastLBar
+    lastL := dPL
+    lastLBar := pivotBar
+    bool isHL = not na(prevL) and lastL > prevL
+    bool isLL = not na(prevL) and lastL < prevL
+    bool laterWavePivot = na(wavePivotBar) or pivotBar > wavePivotBar
+
+    if isLL and not na(lastH) and lastHBar < lastLBar
+        modoriH := lastH
+
+    if not dualPivot and laterWavePivot and not waveInvalid
+        if isLL
+            if (waveDir != -1 or waveCount == 0 or waveCount == 5) and not na(lastH) and lastHBar < lastLBar and lastL < lastH
+                waveDir := -1
+                waveCount := 1
+                wavePivotBar := pivotBar
+                w0Price := lastH
+                w1Price := lastL
+                w2Price := na
+                w3Price := na
+                w4Price := na
+                w5Price := na
+                lowWaveTag := " [1W候補]"
+            else if waveDir == -1 and waveCount == 1
+                w1Price := lastL
+                wavePivotBar := pivotBar
+                lowWaveTag := " [1W延長候補]"
+            else if waveDir == -1 and waveCount == 2 and lastL < w1Price
+                waveCount := 3
+                w3Price := lastL
+                wavePivotBar := pivotBar
+                lowWaveTag := " [3W候補]"
+            else if waveDir == -1 and waveCount == 3 and lastL < w3Price
+                w3Price := lastL
+                wavePivotBar := pivotBar
+                lowWaveTag := " [3W延長候補]"
+            else if waveDir == -1 and waveCount == 4 and lastL < w3Price
+                float lenW1 = w0Price - w1Price
+                float lenW3 = w2Price - w3Price
+                float lenW5 = w4Price - lastL
+                if lenW3 < lenW1 and lenW3 < lenW5
+                    waveInvalid := true
+                else
+                    waveCount := 5
+                    w5Price := lastL
+                    wavePivotBar := pivotBar
+                    lowWaveTag := " [5W候補]"
+        else if isHL
+            if waveDir == 1 and waveCount == 1
+                if lastL > w0Price and lastL < w1Price
+                    waveCount := 2
+                    w2Price := lastL
+                    wavePivotBar := pivotBar
+                    lowWaveTag := " [2W候補]"
+                else
+                    waveInvalid := true
+            else if waveDir == 1 and waveCount == 3
+                if lastL > w1Price and lastL < w3Price
+                    waveCount := 4
+                    w4Price := lastL
+                    wavePivotBar := pivotBar
+                    lowWaveTag := " [4W候補]"
+                else
+                    waveInvalid := true
+
+    if dowMode == "切り上げ・切り下げ重視" and trend == -1 and isHL
+        trend := 0
+
+// 確定足の終値によるN波動ブレイク。既知ピボットの確定遅延は残る。
+if confirmed and not na(lastH) and not na(lastL) and not na(prevH) and not na(prevL)
+    if lastL > prevL and close > lastH and trend != 1
+        trend := 1
+        oshiL := lastL
+        bool upSequence = not na(prevLBar) and prevLBar < lastHBar and lastHBar < lastLBar
+        if not waveInvalid and not dualPivot and upSequence and (waveDir != 1 or waveCount == 0)
+            waveDir := 1
+            waveCount := 2
+            wavePivotBar := lastLBar
+            w0Price := prevL
+            w1Price := lastH
+            w2Price := lastL
+            w3Price := na
+            w4Price := na
+            w5Price := na
+    else if lastH < prevH and close < lastL and trend != -1
+        trend := -1
+        modoriH := lastH
+        bool downSequence = not na(prevHBar) and prevHBar < lastLBar and lastLBar < lastHBar
+        if not waveInvalid and not dualPivot and downSequence and (waveDir != -1 or waveCount == 0)
+            waveDir := -1
+            waveCount := 2
+            wavePivotBar := lastHBar
+            w0Price := prevH
+            w1Price := lastL
+            w2Price := lastH
+            w3Price := na
+            w4Price := na
+            w5Price := na
+
+if newSwing and not na(prevH) and not na(prevL)
+    if lastH > prevH and lastL > prevL
+        trend := 1
+        if na(oshiL)
+            oshiL := lastL
+    else if lastH < prevH and lastL < prevL
+        trend := -1
+        if na(modoriH)
+            modoriH := lastH
+
+activeSupport = dowMode == "押し安値・戻り高値重視" ? (not na(oshiL) ? oshiL : lastL) : lastL
+activeResistance = dowMode == "押し安値・戻り高値重視" ? (not na(modoriH) ? modoriH : lastH) : lastH
+
+// ヒゲによる無効化も、その足が確定した時点で確認する。
+// 第3波最短の判定は第5波終点候補が得られた時のみ可能。
+if confirmed and waveCount > 0 and waveCount < 5
+    if waveDir == 1
+        if not na(w0Price) and low <= w0Price
+            waveInvalid := true
+        if (waveCount == 3 or waveCount == 4) and not na(w1Price) and low <= w1Price
+            waveInvalid := true
+        if waveCount == 2 and not na(w2Price) and low < w2Price
+            waveInvalid := true
+        if waveCount == 4 and not na(w4Price) and low < w4Price
+            waveInvalid := true
+    else if waveDir == -1
+        if not na(w0Price) and high >= w0Price
+            waveInvalid := true
+        if (waveCount == 3 or waveCount == 4) and not na(w1Price) and high >= w1Price
+            waveInvalid := true
+        if waveCount == 2 and not na(w2Price) and high > w2Price
+            waveInvalid := true
+        if waveCount == 4 and not na(w4Price) and high > w4Price
+            waveInvalid := true
+
+if confirmed
+    if trend == 1 and not na(activeSupport) and close < activeSupport
+        trend := 0
+        waveInvalid := true
+    else if trend == -1 and not na(activeResistance) and close > activeResistance
+        trend := 0
+        waveInvalid := true
+
+if confirmed and waveInvalid
+    waveCount := 0
+    waveDir := 0
+    wavePivotBar := na
+    w0Price := na
+    w1Price := na
+    w2Price := na
+    w3Price := na
+    w4Price := na
+    w5Price := na
+    highWaveTag := ""
+    lowWaveTag := ""
+
+// 初期値は「判明した足」に表示。過去位置表示はユーザーが明示的に選択する。
+if confirmed and dowShow and (dowLabels or elliottShow)
+    int labelX = labelsAtPivot ? pivotBar : bar_index
+    string pivotTip = "ピボット位置: bar " + str.tostring(pivotBar) + "\n判明: bar " + str.tostring(bar_index) + "\n右側" + str.tostring(dowLen) + "本の確定後。波動は候補です。"
+    if not na(dPH) and not na(prevH)
+        string hName = lastH > prevH ? "HH" : lastH < prevH ? "LH" : "EH"
+        string hText = (dowLabels ? hName : "") + (elliottShow ? highWaveTag : "")
+        if hText != ""
+            label.new(labelX, lastH, hText, style=label.style_label_down, color=color.new(color.white, 100), textcolor=lastH > prevH ? upColor : lastH < prevH ? dnColor : color.gray, size=size.tiny, tooltip=pivotTip)
+    if not na(dPL) and not na(prevL)
+        string lName = lastL > prevL ? "HL" : lastL < prevL ? "LL" : "EL"
+        string lText = (dowLabels ? lName : "") + (elliottShow ? lowWaveTag : "")
+        if lText != ""
+            label.new(labelX, lastL, lText, style=label.style_label_up, color=color.new(color.white, 100), textcolor=lastL > prevL ? upColor : lastL < prevL ? dnColor : color.gray, size=size.tiny, tooltip=pivotTip)
+
+breakLevel = trend == 1 ? activeSupport : trend == -1 ? activeResistance : na
+plot(dowShow and dowLine ? breakLevel : na, "トレンド終了ライン（注文なし）", color=trend == 1 ? upColor : dnColor, style=plot.style_steplinebr, linewidth=2)
+bgcolor(dowShow and dowBg ? (trend == 1 ? color.new(upColor, 92) : trend == -1 ? color.new(dnColor, 92) : na) : na, title="確定足のトレンド背景")
+
+// ───────── 4. グランビルの法則に基づく独自候補 ─────────
+// ①は価格と基準MAの交差。短期MAと長期MAのゴールデンクロスではない。
+// ②はMAをまたいだ復帰、③はMAを割らない接近・反発として分離する。
+// エリオット候補は②の環境条件に使用するが、MA条件の代替にはしない。
+grpGran      = "4. グランビル候補（確定足のみ）"
+granShow     = input.bool(true, "グランビル②・③候補を有効にする", group=grpGran)
+granBrkShow  = input.bool(false, "グランビル①候補を有効にする", group=grpGran, tooltip="価格と基準MAの交差＋MAの傾き等による独自初動候補です。②③のON/OFFとは独立しています。")
+granShow4    = input.bool(true, "グランビル④・決済検討目安を有効にする", group=grpGran, tooltip="建玉・約定価格を参照しません。含み損でも表示され、利益確定を保証しません。")
+granTarget   = input.string("短期MA", "基準にする移動平均線", options=["短期MA", "中期MA"], group=grpGran)
+granDistATR  = input.float(0.3, "③のMA接近幅（表示足ATR倍）", minval=0.05, maxval=1.5, step=0.05, group=grpGran)
+granDivATR   = input.float(2.0, "④のMA乖離幅（表示足ATR倍）", minval=1.0, maxval=5.0, step=0.2, group=grpGran)
+granUsePA    = input.bool(true, "ローソク足の反発形状条件を使う", group=grpGran, tooltip="ON/OFFにかかわらず全売買サインは足の確定時のみです。形状判定は簡易条件です。")
+granFilter   = input.bool(false, "長期MA（初期値200）フィルターを適用", group=grpGran)
+granCooldown = input.int(3, "同方向サインの間に空けるバー本数", minval=1, maxval=20, group=grpGran)
+
+targetMA = granTarget == "短期MA" ? ma1 : ma2
+targetMALen = granTarget == "短期MA" ? len1 : len2
+isMaRising = targetMA > targetMA[3]
+isMaFalling = targetMA < targetMA[3]
+passLongFilter = not granFilter or close > ma3
+passShortFilter = not granFilter or close < ma3
+
+// 履歴を参照する関数は条件式の内部ではなく毎回評価する。
+bool priceCrossUp = ta.crossover(close, targetMA)
+bool priceCrossDown = ta.crossunder(close, targetMA)
+bool granReady = not na(atr14) and not na(targetMA[3]) and (not granFilter or not na(ma3))
+
+candleRange = high - low
+lowerWick = math.min(close, open) - low
+upperWick = high - math.max(close, open)
+bullPinBar = candleRange > 0 and lowerWick / candleRange >= 0.45 and close >= open
+bullEngulf = close > open and close[1] < open[1] and close >= open[1] and open <= close[1]
+bullRebound = close > open and close > targetMA and (close[1] <= open[1] or low < low[1])
+bullPA = granUsePA ? (bullPinBar or bullEngulf or bullRebound) : close > targetMA
+bearPinBar = candleRange > 0 and upperWick / candleRange >= 0.45 and close <= open
+bearEngulf = close < open and close[1] > open[1] and close <= open[1] and open >= close[1]
+bearRebound = close < open and close < targetMA and (close[1] >= open[1] or high > high[1])
+bearPA = granUsePA ? (bearPinBar or bearEngulf or bearRebound) : close < targetMA
+
+// 過去の終値は、同じ過去バーのMAと比較する。
+dipBelowMA = (low < targetMA or close[1] < targetMA[1]) and close > targetMA
+riseAboveMA = (high > targetMA or close[1] > targetMA[1]) and close < targetMA
+touchMaBuy = low >= targetMA and low <= targetMA + atr14 * granDistATR and close >= targetMA and close[1] >= targetMA[1]
+touchMaSell = high <= targetMA and high >= targetMA - atr14 * granDistATR and close <= targetMA and close[1] <= targetMA[1]
+
+var int lastBuyBar = -999
+var int lastSellBar = -999
+var int lastExitBar = -999
+bool buyCooldownOK = bar_index - lastBuyBar > granCooldown
+bool sellCooldownOK = bar_index - lastSellBar > granCooldown
+bool exitCooldownOK = bar_index - lastExitBar > granCooldown
+bool waveEarlyUp = waveDir == 1 and (waveCount == 1 or waveCount == 2)
+bool waveEarlyDown = waveDir == -1 and (waveCount == 1 or waveCount == 2)
+
+rawGranBuy2 = (trend == 1 or waveEarlyUp) and isMaRising and dipBelowMA and bullPA and passLongFilter and buyCooldownOK
+rawGranSell2 = (trend == -1 or waveEarlyDown) and isMaFalling and riseAboveMA and bearPA and passShortFilter and sellCooldownOK
+rawGranBuy3 = trend == 1 and isMaRising and touchMaBuy and not rawGranBuy2 and bullPA and passLongFilter and buyCooldownOK
+rawGranSell3 = trend == -1 and isMaFalling and touchMaSell and not rawGranSell2 and bearPA and passShortFilter and sellCooldownOK
+rawGranBuy1 = trend != -1 and isMaRising and priceCrossUp and close > open and passLongFilter and buyCooldownOK
+rawGranSell1 = trend != 1 and isMaFalling and priceCrossDown and close < open and passShortFilter and sellCooldownOK
+
+farAboveMA = high >= targetMA + atr14 * granDivATR
+farBelowMA = low <= targetMA - atr14 * granDivATR
+bearRevCandle = (candleRange > 0 and upperWick / candleRange >= 0.45) or close < open
+bullRevCandle = (candleRange > 0 and lowerWick / candleRange >= 0.45) or close > open
+rawGranExitLong = (trend == 1 or (waveDir == 1 and waveCount > 0)) and farAboveMA and bearRevCandle and exitCooldownOK
+rawGranExitShort = (trend == -1 or (waveDir == -1 and waveCount > 0)) and farBelowMA and bullRevCandle and exitCooldownOK
+
+// 描画、クールダウン更新、アラートは同じ確定済みフラグを使用。
+bool granBuy2 = confirmed and granReady and granShow and rawGranBuy2
+bool granSell2 = confirmed and granReady and granShow and rawGranSell2
+bool granBuy3 = confirmed and granReady and granShow and rawGranBuy3
+bool granSell3 = confirmed and granReady and granShow and rawGranSell3
+bool granBuy1 = confirmed and granReady and granBrkShow and rawGranBuy1 and not granBuy2 and not granBuy3
+bool granSell1 = confirmed and granReady and granBrkShow and rawGranSell1 and not granSell2 and not granSell3
+bool granExitLong = confirmed and granReady and granShow4 and rawGranExitLong
+bool granExitShort = confirmed and granReady and granShow4 and rawGranExitShort
+
+if granBuy2 or granBuy3 or granBuy1
+    lastBuyBar := bar_index
+if granSell2 or granSell3 or granSell1
+    lastSellBar := bar_index
+if granExitLong or granExitShort
+    lastExitBar := bar_index
+
+plotshape(granBuy2, title="買②候補・MA復帰", style=shape.labelup, location=location.belowbar, color=upColor, size=size.small, text="★買②", textcolor=color.white)
+plotshape(granSell2, title="売②候補・MA復帰", style=shape.labeldown, location=location.abovebar, color=dnColor, size=size.small, text="★売②", textcolor=color.white)
+plotshape(granBuy3, title="買③候補・浅い反発", style=shape.triangleup, location=location.belowbar, color=upColor, size=size.small, text="買③", textcolor=upColor)
+plotshape(granSell3, title="売③候補・浅い反発", style=shape.triangledown, location=location.abovebar, color=dnColor, size=size.small, text="売③", textcolor=dnColor)
+plotshape(granBuy1, title="買①候補・価格MA交差", style=shape.circle, location=location.belowbar, color=upColor, size=size.tiny, text="買①", textcolor=upColor)
+plotshape(granSell1, title="売①候補・価格MA交差", style=shape.circle, location=location.abovebar, color=dnColor, size=size.tiny, text="売①", textcolor=dnColor)
+plotshape(granExitLong, title="④・買いポジションの決済検討目安", style=shape.xcross, location=location.abovebar, color=color.orange, size=size.tiny, text="目安④", textcolor=color.orange)
+plotshape(granExitShort, title="④・売りポジションの決済検討目安", style=shape.xcross, location=location.belowbar, color=color.aqua, size=size.tiny, text="目安④", textcolor=color.aqua)
+
+// ───────── 5. ATR・固定幅による距離目安（実注文なし） ─────────
+grpATR = "5. ATR・固定幅の距離目安"
+atrTf = input.timeframe("5", "ATRの計算時間足", options=["1", "3", "5", "15", "30", "60", "240", "1D"], group=grpATR)
+atrLen = input.int(14, "ATR期間", minval=1, group=grpATR)
+atrMulti = input.float(2.5, "ATR倍率（独自の検証用設定）", minval=0.5, maxval=10.0, step=0.1, group=grpATR)
+widthMode = input.string("ATR×倍率", "幅候補の計算方法", options=["ATR×倍率", "固定pips", "ATR×倍率＋下限"], group=grpATR)
+fixedPips = input.float(20.0, "固定幅（共通入力・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="20.0は計算確認用の初期値で、各ペアの推奨値ではありません。チャートを切り替えてもこの共通入力は自動調整しません。")
+minPips = input.float(20.0, "下限幅（共通入力・下限モードのみ・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="下限だけで上限はありません。ATRが大きくなると候補幅・換算金額も増えます。ペア別の最適化は行いません。")
+widthStepPips = input.float(0.1, "幅候補の切り上げ単位（pips）", minval=0.1, maxval=10.0, step=0.1, group=grpATR, tooltip="画面表示と内部計算をそろえます。実際に入力可能な単位・最小幅は注文画面で別途確認してください。")
+showTrailPlot = input.bool(true, "現在値からの距離目安ドットを表示（追随ストップではない）", group=grpATR)
+atrLowPips = input.float(3.0, "低ボラ境界（共通入力・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="選択ATRがこの値未満なら低ボラ色。各ペアで検証済みの境界ではありません。時間足・ペアに応じて確認してください。")
+atrHighPips = input.float(8.0, "高ボラ境界（共通入力・pips）", minval=0.2, step=0.5, group=grpATR, tooltip="選択ATRがこの値以上なら高ボラ色。売買の可否、指標発表の有無は判断しません。")
+colAtrLow = input.color(color.aqua, "色：低ボラ", group=grpATR, inline="ac")
+colAtrNorm = input.color(color.lime, "中間", group=grpATR, inline="ac")
+colAtrHigh = input.color(color.orange, "高ボラ", group=grpATR, inline="ac")
+
+if barstate.isfirst and atrLowPips >= atrHighPips
+    runtime.error("低ボラ境界は高ボラ境界より小さく設定してください。")
+
+float atrOnChart = ta.atr(atrLen)
+float chartSeconds = timeframe.in_seconds()
+float atrSeconds = timeframe.in_seconds(atrTf)
+float atrSource = na
+int atrSourceClose = na
+string atrRoute = ""
+
+// 下位足を取得する関数は本当に下位足の場合だけ呼ぶ。
+// 空配列・履歴不足はnaのまま。他の時間足のATRで穴埋めしない。
+if atrSeconds < chartSeconds
+    [atrValues, atrCloseTimes] = request.security_lower_tf(syminfo.tickerid, atrTf, [ta.atr(atrLen), time_close], ignore_invalid_timeframe=true)
+    atrRoute := "下位足の終了済みデータ"
+    int cutoff = barstate.isrealtime ? timenow : time_close
+    int i = array.size(atrValues) - 1
+    while i >= 0
+        float value = array.get(atrValues, i)
+        int valueClose = array.get(atrCloseTimes, i)
+        if not na(value) and not na(valueClose) and not na(cutoff) and valueClose <= cutoff
+            atrSource := value
+            atrSourceClose := valueClose
+            break
+        i -= 1
+else if atrSeconds > chartSeconds
+    // [1] + lookahead_on: 前の確定した上位足を次の上位足期間から使用。
+    // 未確定の上位足を読み込まず、未来の値も先取りしない。
+    [confirmedAtr, confirmedCloseTime] = request.security(syminfo.tickerid, atrTf, [ta.atr(atrLen)[1], time_close[1]], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+    atrSource := confirmedAtr
+    atrSourceClose := confirmedCloseTime
+    atrRoute := "上位足の前回確定値"
+else
+    atrSource := confirmed ? atrOnChart : atrOnChart[1]
+    atrSourceClose := confirmed ? time_close : time_close[1]
+    atrRoute := "表示足の直近確定値"
+
+bool atrAvailable = not na(atrSource) and atrSource > 0
+float atrPips = atrAvailable ? atrSource / pipSize : na
+float rawTrailPips = atrAvailable ? atrPips * atrMulti : na
+float selectedPips = switch widthMode
+    "固定pips" => fixedPips
+    "ATR×倍率＋下限" => not na(rawTrailPips) ? math.max(rawTrailPips, minPips) : na
+    => rawTrailPips
+
+// 非負の値幅を指定単位へ切り上げる。微小な浮動小数誤差だけを許容。
+float trailPips = not na(selectedPips) ? math.ceil(selectedPips / widthStepPips - 1e-9) * widthStepPips : na
+float trailDist = not na(trailPips) ? trailPips * pipSize : na
+color atrColor = not atrAvailable ? color.gray : atrPips < atrLowPips ? colAtrLow : atrPips >= atrHighPips ? colAtrHigh : colAtrNorm
+string atrStatus = not atrAvailable ? "取得不可/待ち" : atrPips < atrLowPips ? "低ボラ" : atrPips >= atrHighPips ? "高ボラ" : "中間"
+
+// 以下はclose±距離。最高値/最安値や約定を保持せず、不利方向にも戻る。
+// ブローカーのトレーリングストップ・固定SL・建玉とは連動しない。
+float trailLongLv = not na(trailDist) ? math.round_to_mintick(close - trailDist) : na
+float trailShortLv = not na(trailDist) ? math.round_to_mintick(close + trailDist) : na
+plot(showTrailPlot and trend == 1 ? trailLongLv : na, "買い側の距離目安（注文・追随なし）", color=atrColor, style=plot.style_circles, linewidth=2)
+plot(showTrailPlot and trend == -1 ? trailShortLv : na, "売り側の距離目安（注文・追随なし）", color=atrColor, style=plot.style_circles, linewidth=2)
+plot(trailPips, "採用幅候補（pips・切上げ済み）", color=atrColor, display=display.status_line + display.data_window)
+plot(rawTrailPips, "ATR×倍率（pips・丸め前）", color=atrColor, display=display.data_window)
+plot(atrPips, "選択時間足ATR（pips）", color=atrColor, display=display.data_window)
+
+// 手入力値は参考表示にのみ使用し、過去/現在のサインをフィルターしない。
+// 数量はチャートの基軸通貨の単位。3,000 EURは3,000 USDや3,000円ではない。
+grpRisk = "6. クロス円の参考金額（口座連携なし）"
+units = input.int(3000, "数量（共通入力・基軸通貨数。ロット数ではない）", minval=1, group=grpRisk, tooltip="EURJPYならEUR、GBPJPYならGBPの数量として計算します。ペアを切り替えても数値は自動変更しません。必要証拠金・残高・建玉は取得しません。")
+spreadWarningPips = input.float(0.0, "手入力SPの注意境界（共通・0で判定OFF）", minval=0.0, step=0.1, group=grpRisk, tooltip="独自の比較用の境界です。0は境界判定OFF。入力SPが設定済みかつこの境界超過なら注意を表示します。注文停止やサインの除外はしません。")
+
+grpSpread = "6A. ペア別の参考スプレッド（手入力・実測連携なし）"
+spEURSet = input.bool(false, "EURJPY 設定済み", group=grpSpread, inline="spEUR")
+spEUR = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spEUR", tooltip="発注画面などで確認した値を手入力し、設定済みにチェックします。OFFの間は未設定として扱い、0コストとは表示しません。")
+spGBPSet = input.bool(false, "GBPJPY 設定済み", group=grpSpread, inline="spGBP")
+spGBP = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spGBP")
+spAUDSet = input.bool(false, "AUDJPY 設定済み", group=grpSpread, inline="spAUD")
+spAUD = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spAUD")
+spNZDSet = input.bool(false, "NZDJPY 設定済み", group=grpSpread, inline="spNZD")
+spNZD = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spNZD")
+spCADSet = input.bool(false, "CADJPY 設定済み", group=grpSpread, inline="spCAD")
+spCAD = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spCAD")
+spCHFSet = input.bool(false, "CHFJPY 設定済み", group=grpSpread, inline="spCHF")
+spCHF = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spCHF")
+
+// 現在のチャートに一致する入力だけを選択。別ペアのSPは使い回さない。
+bool spreadConfigured = switch syminfo.basecurrency
+    "EUR" => spEURSet
+    "GBP" => spGBPSet
+    "AUD" => spAUDSet
+    "NZD" => spNZDSet
+    "CAD" => spCADSet
+    "CHF" => spCHFSet
+    => false
+float selectedSpreadPips = switch syminfo.basecurrency
+    "EUR" => spEUR
+    "GBP" => spGBP
+    "AUD" => spAUD
+    "NZD" => spNZD
+    "CAD" => spCAD
+    "CHF" => spCHF
+    => na
+float manualSpreadPips = spreadConfigured ? selectedSpreadPips : na
+bool spreadAvailable = spreadConfigured and not na(manualSpreadPips)
+bool spreadWarningEnabled = spreadWarningPips > 0
+bool spreadAboveBoundary = spreadAvailable and spreadWarningEnabled and manualSpreadPips > spreadWarningPips
+float pipAmountJPY = pipSize * units
+float widthAmountJPY = not na(trailDist) ? trailDist * units : na
+float spreadAmountJPY = spreadAvailable ? manualSpreadPips * pipSize * units : na
+
+// ───────── 7. アラート（8種・全条件が表示足の確定時のみ） ─────────
+// waveCount=3は第4波調整候補なので、第3波推進の一致条件から除く。
+bool goldenSetupBuy = granBuy2 and waveDir == 1 and waveCount == 2
+bool goldenSetupSell = granSell2 and waveDir == -1 and waveCount == 2
+bool dowUpEvent = confirmed and trend == 1 and trend[1] != 1
+bool dowDownEvent = confirmed and trend == -1 and trend[1] != -1
+bool dowEndEvent = confirmed and trend == 0 and nz(trend[1], 0) != 0
+
+alertcondition(goldenSetupBuy or goldenSetupSell, "1. 第3波候補×グランビル②", "{{ticker}} {{interval}} 確定足: 第3波推進候補と②が一致。売買指示・約定ではありません。")
+alertcondition(granBuy2 or granSell2, "2. グランビル②候補", "{{ticker}} {{interval}} 確定足: ②（MAをまたいだ復帰）候補。")
+alertcondition(granBuy3 or granSell3, "3. グランビル③候補", "{{ticker}} {{interval}} 確定足: ③（MAを割らない接近・反発）候補。")
+alertcondition(granExitLong or granExitShort, "4. グランビル④・決済検討目安", "{{ticker}} {{interval}} 確定足: MA乖離と反転形状。建玉や損益は参照していません。")
+alertcondition(granBuy1 or granSell1, "5. グランビル①候補", "{{ticker}} {{interval}} 確定足: 価格と基準MAの交差による初動候補。")
+alertcondition(dowUpEvent, "6. ダウ：上昇トレンド入り", "{{ticker}} {{interval}} 確定足: ダウの上昇判定へ変化。")
+alertcondition(dowDownEvent, "7. ダウ：下降トレンド入り", "{{ticker}} {{interval}} 確定足: ダウの下降判定へ変化。")
+alertcondition(dowEndEvent, "8. ダウ：トレンド終了", "{{ticker}} {{interval}} 確定足: トレンド判定がレンジ/未判定へ変化。")
+
+// ───────── 8. 状況パネル（16行・銘柄と基軸通貨を明記） ─────────
+grpPanel = "7. 表示パネル"
+showTable = input.bool(true, "状況パネルを表示", group=grpPanel)
+tablePosIn = input.string("右下", "パネルの位置", options=["右上", "右下", "左下", "中央下"], group=grpPanel)
+panelSizeIn = input.string("小", "文字サイズ", options=["極小", "小", "標準"], group=grpPanel)
+panelSize = panelSizeIn == "極小" ? size.tiny : panelSizeIn == "標準" ? size.normal : size.small
+tablePos = switch tablePosIn
+    "右上" => position.top_right
+    "右下" => position.bottom_right
+    "左下" => position.bottom_left
+    => position.bottom_center
+var table tb = table.new(tablePos, 2, 16, bgcolor=color.new(color.black, 20), border_width=1)
+
+f_row(table panel, int row, string heading, string value, color valueColor, string textSize) =>
+    table.cell(panel, 0, row, heading, text_color=color.white, text_size=textSize, text_halign=text.align_left)
+    table.cell(panel, 1, row, value, text_color=valueColor, text_size=textSize, text_halign=text.align_left)
+
+if barstate.islast
+    if showTable
+        int po = ma1 > ma2 and ma2 > ma3 ? 1 : ma1 < ma2 and ma2 < ma3 ? -1 : 0
+        string dowText = trend == 1 ? "上昇トレンド" : trend == -1 ? "下降トレンド" : "レンジ / 判定なし"
+        string poText = po == 1 ? "短期 > 中期 > 長期" : po == -1 ? "短期 < 中期 < 長期" : "混在 / 計算待ち"
+        string maSlope = isMaRising ? "上向き" : isMaFalling ? "下向き" : "横ばい / 計算待ち"
+        string lvText = trend == 1 ? "押し安値 " + str.tostring(activeSupport, format.mintick) : trend == -1 ? "戻り高値 " + str.tostring(activeResistance, format.mintick) : "－"
+        string elDirTxt = waveDir == 1 ? "上昇 " : waveDir == -1 ? "下降 " : ""
+        string elPhase = switch waveCount
+            1 => elDirTxt + "第2波調整候補"
+            2 => elDirTxt + "第3波推進候補"
+            3 => elDirTxt + "第4波調整候補"
+            4 => elDirTxt + "第5波推進候補"
+            5 => elDirTxt + "第5波終点候補・警戒"
+            => "カウント待機"
+        color elColor = (waveCount == 2 or waveCount == 4) ? (waveDir == 1 ? upColor : dnColor) : (waveCount == 1 or waveCount == 3) ? color.yellow : color.gray
+
+        // この行は現在の足の状態。直前のサインを持ち越して売買指示にしない。
+        string granState = confirmed ? "待機" : "足の確定待ち"
+        color granColor = color.gray
+        if granBuy2
+            granState := goldenSetupBuy ? "★買② + 第3波推進候補" : "★買②候補"
+            granColor := upColor
+        else if granSell2
+            granState := goldenSetupSell ? "★売② + 第3波推進候補" : "★売②候補"
+            granColor := dnColor
+        else if granBuy3
+            granState := "買③候補"
+            granColor := upColor
+        else if granSell3
+            granState := "売③候補"
+            granColor := dnColor
+        else if granBuy1
+            granState := "買①候補"
+            granColor := upColor
+        else if granSell1
+            granState := "売①候補"
+            granColor := dnColor
+        if granExitLong or granExitShort
+            bool entryAlso = granBuy1 or granBuy2 or granBuy3 or granSell1 or granSell2 or granSell3
+            granState := entryAlso ? granState + " / ④併発・要確認" : "④ 決済検討目安（損益未参照）"
+            granColor := color.orange
+
+        string atrTimeText = not na(atrSourceClose) ? str.format_time(atrSourceClose, "MM/dd HH:mm", "Asia/Tokyo") + " JST" : "終了時刻なし"
+        string atrText = atrAvailable ? f_one(atrPips) + " pips [" + atrStatus + "] / " + atrTimeText : "取得不可/待ち（代用なし）"
+        string rawText = not na(rawTrailPips) ? str.tostring(rawTrailPips, "0.00") + " pips（丸め前）" : "取得不可"
+        string widthText = not na(trailPips) ? f_one(trailPips) + " pips / " + str.tostring(trailDist, "0.000") + "円" : "計算不可（ATR未取得）"
+        string amountText = not na(widthAmountJPY) ? str.tostring(widthAmountJPY, "#,##0.0") + "円・損失上限ではない" : "計算不可"
+        string spreadText = spreadAvailable ? f_one(manualSpreadPips) + " pips / " + str.tostring(spreadAmountJPY, "#,##0.0") + "円（手入力・未実測）" : "未設定（0コストではない）"
+        color spreadColor = not spreadAvailable or spreadAboveBoundary ? color.orange : color.silver
+        string notes = "距離目安のみ・自動発注なし\n幅・ATR倍率・数量は共通入力（未最適化）"
+        color noteColor = color.silver
+        if chartSeconds != atrSeconds
+            notes += "\n判定" + f_tfLabel(timeframe.period) + " / ATR" + f_tfLabel(atrTf) + "は別"
+            noteColor := color.yellow
+        if not atrAvailable
+            notes += widthMode == "固定pips" ? "\nATR未取得・固定幅のみ表示" : "\nATR未取得・幅候補は使用不可"
+            noteColor := color.orange
+        if not spreadAvailable
+            notes += "\n" + pairCode + "のSP未設定・発注画面で確認"
+            noteColor := color.orange
+        if spreadAboveBoundary
+            notes += "\n手入力SPが注意境界超過・実測確認"
+            noteColor := color.orange
+        if spreadAvailable and not na(trailPips) and trailPips <= manualSpreadPips
+            notes += "\n幅候補≦手入力SP・設定再検討"
+            noteColor := color.orange
+        if syminfo.prefix != "FOREXCOM"
+            notes += "\nFOREXCOM:" + pairCode + "のレートと照合"
+            noteColor := color.orange
+
+        f_row(tb, 0, "銘柄 / 配信元", pairLabel + " / " + syminfo.prefix, color.white, panelSize)
+        f_row(tb, 1, "判定足 / サイン", f_tfLabel(timeframe.period) + " / 終値確定のみ", color.white, panelSize)
+        f_row(tb, 2, "ダウ理論", dowText, trend == 1 ? upColor : trend == -1 ? dnColor : color.gray, panelSize)
+        f_row(tb, 3, "エリオット（簡易候補）", elPhase, elColor, panelSize)
+        f_row(tb, 4, "MAの並び", poText, po == 1 ? upColor : po == -1 ? dnColor : color.gray, panelSize)
+        f_row(tb, 5, str.tostring(targetMALen) + "MAの傾き", maSlope, isMaRising ? upColor : isMaFalling ? dnColor : color.gray, panelSize)
+        string longMaText = na(ma3) ? "計算待ち" : close > ma3 ? "上 / フィルター" + (granFilter ? "ON" : "OFF") : close < ma3 ? "下 / フィルター" + (granFilter ? "ON" : "OFF") : "同値 / フィルター" + (granFilter ? "ON" : "OFF")
+        f_row(tb, 6, "価格と" + str.tostring(len3) + "MA", longMaText, na(ma3) ? color.gray : close > ma3 ? upColor : close < ma3 ? dnColor : color.gray, panelSize)
+        f_row(tb, 7, "防衛ライン（注文なし）", lvText, color.white, panelSize)
+        f_row(tb, 8, "グランビル判定", granState, granColor, panelSize)
+        f_row(tb, 9, f_tfLabel(atrTf) + " ATR(" + str.tostring(atrLen) + ")", atrText, atrColor, panelSize)
+        f_row(tb, 10, "ATR×" + f_one(atrMulti), rawText, atrColor, panelSize)
+        f_row(tb, 11, "幅候補 / " + widthMode, widthText, not na(trailPips) ? color.white : color.orange, panelSize)
+        f_row(tb, 12, "1pip換算 / 参考数量", str.tostring(pipAmountJPY, "#,##0.0") + "円 / " + str.tostring(units, "#,##0") + " " + syminfo.basecurrency, color.white, panelSize)
+        f_row(tb, 13, str.tostring(units, "#,##0") + " " + syminfo.basecurrency + "・値幅換算", amountText, color.white, panelSize)
+        f_row(tb, 14, pairLabel + " SP（手入力）", spreadText, spreadColor, panelSize)
+        f_row(tb, 15, "確認事項", notes, noteColor, panelSize)
+        table.cell_set_tooltip(tb, 1, 9, "ATR取得方式: " + atrRoute + "\n表示は取得元バーの終了時刻です。市場の営業状態や注文可能性は判定していません。")
+        table.cell_set_tooltip(tb, 1, 11, "切り上げ単位: " + f_one(widthStepPips) + " pips\nブローカーの最小幅・入力単位は別途確認。最高値/最安値追随ではありません。")
+        table.cell_set_tooltip(tb, 1, 0, "対象は定義済み6ペア。現在のチャートのみを計算します。他ペアの同時監視、注文口座との銘柄同期は行いません。")
+        table.cell_set_tooltip(tb, 1, 12, "対象6ペアは1pip=0.01円。数量は基軸通貨数です。金額は値幅の換算で、必要証拠金・維持率・損失上限ではありません。")
+        table.cell_set_tooltip(tb, 1, 14, "設定 6A の該当ペアの値と設定済みチェックを使用します。ライブBid/Askは取得しません。別の配信元・時間帯では再確認してください。")
+    else
+        table.clear(tb, 0, 0, 1, 15)
