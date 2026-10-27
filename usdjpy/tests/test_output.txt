@@ -1,0 +1,83 @@
+Spreadsheet runtime warmup failed during python startup
+Traceback (most recent call last):
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/patches/warm_spreadsheet_runtime_on_startup.py", line 26, in warm_spreadsheet_runtime_on_startup
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/spreadsheet_warmup.py", line 785, in warm_spreadsheet_runtime
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/spreadsheet_warmup.py", line 718, in _warm_feature_flows
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/spreadsheet_warmup.py", line 509, in _warm_drawing_and_image_flows
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/generated/interface/models.py", line 32861, in bring_to_front
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/rpc/remote.py", line 764, in __call__
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/rpc/client.py", line 175, in call
+artifact_tool.rpc.client.RemoteError: Element ordering requires an owning element collection.
+test_aging_pivots_stay_within_reserved_history_model (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_aging_pivots_stay_within_reserved_history_model) ... ok
+test_buffer_covers_existing_maximum_lookback (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_buffer_covers_existing_maximum_lookback) ... ok
+test_existing_eviction_rule_is_still_in_source (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_existing_eviction_rule_is_still_in_source) ... ok
+test_inclusive_lookback_boundary_model (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_inclusive_lookback_boundary_model) ... ok
+test_no_all_series_buffer_expansion (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_no_all_series_buffer_expansion) ... ok
+test_only_metadata_and_buffer_block_changed (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_only_metadata_and_buffer_block_changed) ... ok
+test_pivot_label_past_offsets_fit_buffer (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_pivot_label_past_offsets_fit_buffer) ... ok
+test_reported_299_300_boundary_model (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_reported_299_300_boundary_model) ... ok
+test_revision_title_is_distinct_and_short (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_revision_title_is_distinct_and_short) ... ok
+test_time_buffer_is_global_and_unique (test_history_buffer_hotfix.HistoryBufferHotfixTests.test_time_buffer_is_global_and_unique) ... ok
+test_buy2_crosses_below_and_recovers (test_reference_logic.SignalTests.test_buy2_crosses_below_and_recovers) ... ok
+test_buy3_does_not_break_ma (test_reference_logic.SignalTests.test_buy3_does_not_break_ma) ... ok
+test_combined_setup_phase2_not_phase3 (test_reference_logic.SignalTests.test_combined_setup_phase2_not_phase3) ... ok
+test_completed_phase_not_active_wick_check (test_reference_logic.SignalTests.test_completed_phase_not_active_wick_check) ... ok
+test_locked_wave2_break (test_reference_logic.SignalTests.test_locked_wave2_break) ... ok
+test_origin_wick_long (test_reference_logic.SignalTests.test_origin_wick_long) ... ok
+test_origin_wick_short (test_reference_logic.SignalTests.test_origin_wick_short) ... ok
+test_overlap_long_equal_price (test_reference_logic.SignalTests.test_overlap_long_equal_price) ... ok
+test_overlap_short_equal_price (test_reference_logic.SignalTests.test_overlap_short_equal_price) ... ok
+test_previous_close_compared_to_previous_ma (test_reference_logic.SignalTests.test_previous_close_compared_to_previous_ma) ... ok
+test_sell2_crosses_above_and_recovers (test_reference_logic.SignalTests.test_sell2_crosses_above_and_recovers) ... ok
+test_sell3_stays_below (test_reference_logic.SignalTests.test_sell3_stays_below) ... ok
+test_shortest_wave_comparison (test_reference_logic.SignalTests.test_shortest_wave_comparison) ... ok
+test_valid_up_phase2 (test_reference_logic.SignalTests.test_valid_up_phase2) ... ok
+test_actual_order_code_absent (test_reference_logic.SourceChecks.test_actual_order_code_absent) ... ok
+test_brackets_strings_and_indentation (test_reference_logic.SourceChecks.test_brackets_strings_and_indentation) ... ok
+test_eight_alerts (test_reference_logic.SourceChecks.test_eight_alerts) ... ok
+test_explicit_confirmation_flags (test_reference_logic.SourceChecks.test_explicit_confirmation_flags) ... ok
+test_golden_phase_exact (test_reference_logic.SourceChecks.test_golden_phase_exact) ... ok
+test_higher_timeframe_offsets_both_values (test_reference_logic.SourceChecks.test_higher_timeframe_offsets_both_values) ... ok
+test_lower_request_only_in_lower_branch (test_reference_logic.SourceChecks.test_lower_request_only_in_lower_branch) ... ok
+test_manual_spread_not_a_signal_filter (test_reference_logic.SourceChecks.test_manual_spread_not_a_signal_filter) ... ok
+test_no_malformed_decimal_pattern (test_reference_logic.SourceChecks.test_no_malformed_decimal_pattern) ... ok
+test_no_original_fallback (test_reference_logic.SourceChecks.test_no_original_fallback) ... ok
+test_old_marketing_claims_removed (test_reference_logic.SourceChecks.test_old_marketing_claims_removed) ... ok
+test_one_indicator_v6 (test_reference_logic.SourceChecks.test_one_indicator_v6) ... ok
+test_panel_rows_and_clear (test_reference_logic.SourceChecks.test_panel_rows_and_clear) ... ok
+test_pivot_default_is_confirmation_bar (test_reference_logic.SourceChecks.test_pivot_default_is_confirmation_bar) ... ok
+test_previous_ma_alignment (test_reference_logic.SourceChecks.test_previous_ma_alignment) ... ok
+test_script_and_txt_identical (test_reference_logic.SourceChecks.test_script_and_txt_identical) ... ok
+test_state_reset_clears_direction_prices (test_reference_logic.SourceChecks.test_state_reset_clears_direction_prices) ... ok
+test_15m_chart_5m_atr (test_reference_logic.TimeframeTests.test_15m_chart_5m_atr) ... ok
+test_1h_chart_4h_atr (test_reference_logic.TimeframeTests.test_1h_chart_4h_atr) ... ok
+test_1h_chart_5m_atr (test_reference_logic.TimeframeTests.test_1h_chart_5m_atr) ... ok
+test_1m_chart_5m_atr (test_reference_logic.TimeframeTests.test_1m_chart_5m_atr) ... ok
+test_5m_chart_5m_atr (test_reference_logic.TimeframeTests.test_5m_chart_5m_atr) ... ok
+test_before_first_end (test_reference_logic.TimeframeTests.test_before_first_end) ... ok
+test_empty_array_has_no_fallback (test_reference_logic.TimeframeTests.test_empty_array_has_no_fallback) ... ok
+test_exact_end_is_eligible (test_reference_logic.TimeframeTests.test_exact_end_is_eligible) ... ok
+test_latest_ended_excludes_unfinished (test_reference_logic.TimeframeTests.test_latest_ended_excludes_unfinished) ... ok
+test_missing_latest_value (test_reference_logic.TimeframeTests.test_missing_latest_value) ... ok
+test_3000_units_20_pips (test_reference_logic.WidthTests.test_3000_units_20_pips) ... ok
+test_atr_rounds_up_to_7_8 (test_reference_logic.WidthTests.test_atr_rounds_up_to_7_8) ... ok
+test_atr_width_7_8_yen (test_reference_logic.WidthTests.test_atr_width_7_8_yen) ... ok
+test_exact_boundary_not_overrounded (test_reference_logic.WidthTests.test_exact_boundary_not_overrounded) ... ok
+test_fixed_20 (test_reference_logic.WidthTests.test_fixed_20) ... ok
+test_fixed_25_yen (test_reference_logic.WidthTests.test_fixed_25_yen) ... ok
+test_floor_20 (test_reference_logic.WidthTests.test_floor_20) ... ok
+test_floor_not_cap (test_reference_logic.WidthTests.test_floor_not_cap) ... ok
+test_integer_pip_step (test_reference_logic.WidthTests.test_integer_pip_step) ... ok
+test_missing_atr_mode (test_reference_logic.WidthTests.test_missing_atr_mode) ... ok
+test_missing_fixed_mode (test_reference_logic.WidthTests.test_missing_fixed_mode) ... ok
+test_missing_floor_mode (test_reference_logic.WidthTests.test_missing_floor_mode) ... ok
+test_raw_atr_example (test_reference_logic.WidthTests.test_raw_atr_example) ... ok
+test_reference_spread_2_6 (test_reference_logic.WidthTests.test_reference_spread_2_6) ... ok
+test_reference_spread_8_2 (test_reference_logic.WidthTests.test_reference_spread_8_2) ... ok
+test_width_formula_grid (test_reference_logic.WidthTests.test_width_formula_grid) ... ok
+test_zero_atr_is_unavailable (test_reference_logic.WidthTests.test_zero_atr_is_unavailable) ... ok
+
+----------------------------------------------------------------------
+Ran 68 tests in 0.023s
+
+OK

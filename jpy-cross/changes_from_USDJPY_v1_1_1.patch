@@ -1,0 +1,204 @@
+--- USDJPY_AllInOne_v1_1_1/FX_AllInOne_USDJPY_v1_1_1.pine
++++ JPY_Cross_AllInOne_v1_0_0/FX_AllInOne_JPY_Cross.pine
+@@ -1,23 +1,31 @@
+ //@version=6
+-// FX All-in-One Pro — USDJPY review fixes v1.1.1 / 2026-10-26
++// FX All-in-One Pro — JPY Cross v1.0.0 / 2026-10-26
++// Forked from USDJPY v1.1.1. The USDJPY file is not modified.
++// Supported: EURJPY / GBPJPY / AUDJPY / NZDJPY / CADJPY / CHFJPY.
++// One chart symbol at a time; not a multi-symbol scanner.
+ // MA + S/R + Dow + Elliott candidates + Granville candidates + distance reference.
+ // INDICATOR ONLY: no broker orders, no position sync, no actual trailing stop.
+ // Original source: TradingViewAllInOneScript10161026-0030.txt
+-indicator("FX All-in-One Pro USDJPY v1.1.1", shorttitle="UJ 1.1.1", overlay=true, max_lines_count=100, max_labels_count=500, dynamic_requests=true)
++indicator("FX All-in-One Pro JPY Cross v1.0.0", shorttitle="JC 1.0.0", overlay=true, max_lines_count=100, max_labels_count=500, dynamic_requests=true)
+ 
+ // v1.1.1: S/Rの過去座標描画は、内部でtime系列の履歴を参照します。
+ // srLookbackの上限4900本（境界を含む）をカバーするため、timeだけを事前確保します。
+ // 全系列の一括拡張や、探索期間・売買条件の変更は行いません。
+ max_bars_back(time, 5000)
+ 
+-// この修正版はUSDJPYの通常時間足チャート専用です。
+-bool isUSDJPY = syminfo.type == "forex" and syminfo.basecurrency == "USD" and syminfo.currency == "JPY"
++// 銘柄名の部分一致ではなく、FX種別・基軸通貨・決済通貨で対象を確認。
++// USDJPYは既存の専用版を使用。非円ペアや未定義のクロス円には適用しない。
++bool isSupportedBase = syminfo.basecurrency == "EUR" or syminfo.basecurrency == "GBP" or syminfo.basecurrency == "AUD" or syminfo.basecurrency == "NZD" or syminfo.basecurrency == "CAD" or syminfo.basecurrency == "CHF"
++bool isSupportedCross = syminfo.type == "forex" and syminfo.currency == "JPY" and isSupportedBase
+ if barstate.isfirst
+-    if not isUSDJPY
+-        runtime.error("本修正版はUSDJPY専用です。FOREXCOM:USDJPYを選んでください。")
++    if not isSupportedCross
++        runtime.error("クロス円版の対象はEURJPY・GBPJPY・AUDJPY・NZDJPY・CADJPY・CHFJPYです。USDJPYは専用版、NOKSEK等は別版が必要です。")
+     if not chart.is_standard or timeframe.isticks
+         runtime.error("通常の時間足チャートで使用してください。平均足・レンジ・Renko・ティック足等は対象外です。")
+ 
++string pairCode = syminfo.basecurrency + syminfo.currency
++string pairLabel = syminfo.basecurrency + "/" + syminfo.currency
++// 対象6ペアは1pip=0.01円。mintick（価格の最小刻み）とは区別する。
+ float pipSize = 0.01
+ bool confirmed = barstate.isconfirmed
+ 
+@@ -533,12 +541,12 @@
+ atrLen = input.int(14, "ATR期間", minval=1, group=grpATR)
+ atrMulti = input.float(2.5, "ATR倍率（独自の検証用設定）", minval=0.5, maxval=10.0, step=0.1, group=grpATR)
+ widthMode = input.string("ATR×倍率", "幅候補の計算方法", options=["ATR×倍率", "固定pips", "ATR×倍率＋下限"], group=grpATR)
+-fixedPips = input.float(20.0, "固定幅（pips）", minval=0.1, step=0.5, group=grpATR)
+-minPips = input.float(20.0, "下限幅（下限モードのみ・pips）", minval=0.1, step=0.5, group=grpATR)
++fixedPips = input.float(20.0, "固定幅（共通入力・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="20.0は計算確認用の初期値で、各ペアの推奨値ではありません。チャートを切り替えてもこの共通入力は自動調整しません。")
++minPips = input.float(20.0, "下限幅（共通入力・下限モードのみ・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="下限だけで上限はありません。ATRが大きくなると候補幅・換算金額も増えます。ペア別の最適化は行いません。")
+ widthStepPips = input.float(0.1, "幅候補の切り上げ単位（pips）", minval=0.1, maxval=10.0, step=0.1, group=grpATR, tooltip="画面表示と内部計算をそろえます。実際に入力可能な単位・最小幅は注文画面で別途確認してください。")
+ showTrailPlot = input.bool(true, "現在値からの距離目安ドットを表示（追随ストップではない）", group=grpATR)
+-atrLowPips = input.float(3.0, "低ボラ境界（選択ATRがこれ未満・pips）", minval=0.1, step=0.5, group=grpATR)
+-atrHighPips = input.float(8.0, "高ボラ境界（選択ATRがこれ以上・pips）", minval=0.2, step=0.5, group=grpATR)
++atrLowPips = input.float(3.0, "低ボラ境界（共通入力・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="選択ATRがこの値未満なら低ボラ色。各ペアで検証済みの境界ではありません。時間足・ペアに応じて確認してください。")
++atrHighPips = input.float(8.0, "高ボラ境界（共通入力・pips）", minval=0.2, step=0.5, group=grpATR, tooltip="選択ATRがこの値以上なら高ボラ色。売買の可否、指標発表の有無は判断しません。")
+ colAtrLow = input.color(color.aqua, "色：低ボラ", group=grpATR, inline="ac")
+ colAtrNorm = input.color(color.lime, "中間", group=grpATR, inline="ac")
+ colAtrHigh = input.color(color.orange, "高ボラ", group=grpATR, inline="ac")
+@@ -605,12 +613,49 @@
+ plot(atrPips, "選択時間足ATR（pips）", color=atrColor, display=display.data_window)
+ 
+ // 手入力値は参考表示にのみ使用し、過去/現在のサインをフィルターしない。
+-grpRisk = "6. USDJPYの参考金額（口座連携なし）"
+-units = input.int(3000, "数量（通貨数。ロット数ではない）", minval=1, group=grpRisk)
+-manualSpreadPips = input.float(2.6, "参考スプレッド（手入力・pips）", minval=0.0, step=0.1, group=grpRisk)
+-spreadWarningPips = input.float(3.0, "参考スプレッドの注意境界（pips）", minval=0.1, step=0.1, group=grpRisk, tooltip="入力した参考値に対する表示だけです。実測スプレッドの取得、注文の停止、サインの除外は行いません。")
++// 数量はチャートの基軸通貨の単位。3,000 EURは3,000 USDや3,000円ではない。
++grpRisk = "6. クロス円の参考金額（口座連携なし）"
++units = input.int(3000, "数量（共通入力・基軸通貨数。ロット数ではない）", minval=1, group=grpRisk, tooltip="EURJPYならEUR、GBPJPYならGBPの数量として計算します。ペアを切り替えても数値は自動変更しません。必要証拠金・残高・建玉は取得しません。")
++spreadWarningPips = input.float(0.0, "手入力SPの注意境界（共通・0で判定OFF）", minval=0.0, step=0.1, group=grpRisk, tooltip="独自の比較用の境界です。0は境界判定OFF。入力SPが設定済みかつこの境界超過なら注意を表示します。注文停止やサインの除外はしません。")
++
++grpSpread = "6A. ペア別の参考スプレッド（手入力・実測連携なし）"
++spEURSet = input.bool(false, "EURJPY 設定済み", group=grpSpread, inline="spEUR")
++spEUR = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spEUR", tooltip="発注画面などで確認した値を手入力し、設定済みにチェックします。OFFの間は未設定として扱い、0コストとは表示しません。")
++spGBPSet = input.bool(false, "GBPJPY 設定済み", group=grpSpread, inline="spGBP")
++spGBP = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spGBP")
++spAUDSet = input.bool(false, "AUDJPY 設定済み", group=grpSpread, inline="spAUD")
++spAUD = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spAUD")
++spNZDSet = input.bool(false, "NZDJPY 設定済み", group=grpSpread, inline="spNZD")
++spNZD = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spNZD")
++spCADSet = input.bool(false, "CADJPY 設定済み", group=grpSpread, inline="spCAD")
++spCAD = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spCAD")
++spCHFSet = input.bool(false, "CHFJPY 設定済み", group=grpSpread, inline="spCHF")
++spCHF = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spCHF")
++
++// 現在のチャートに一致する入力だけを選択。別ペアのSPは使い回さない。
++bool spreadConfigured = switch syminfo.basecurrency
++    "EUR" => spEURSet
++    "GBP" => spGBPSet
++    "AUD" => spAUDSet
++    "NZD" => spNZDSet
++    "CAD" => spCADSet
++    "CHF" => spCHFSet
++    => false
++float selectedSpreadPips = switch syminfo.basecurrency
++    "EUR" => spEUR
++    "GBP" => spGBP
++    "AUD" => spAUD
++    "NZD" => spNZD
++    "CAD" => spCAD
++    "CHF" => spCHF
++    => na
++float manualSpreadPips = spreadConfigured ? selectedSpreadPips : na
++bool spreadAvailable = spreadConfigured and not na(manualSpreadPips)
++bool spreadWarningEnabled = spreadWarningPips > 0
++bool spreadAboveBoundary = spreadAvailable and spreadWarningEnabled and manualSpreadPips > spreadWarningPips
++float pipAmountJPY = pipSize * units
+ float widthAmountJPY = not na(trailDist) ? trailDist * units : na
+-float spreadAmountJPY = manualSpreadPips * pipSize * units
++float spreadAmountJPY = spreadAvailable ? manualSpreadPips * pipSize * units : na
+ 
+ // ───────── 7. アラート（8種・全条件が表示足の確定時のみ） ─────────
+ // waveCount=3は第4波調整候補なので、第3波推進の一致条件から除く。
+@@ -629,7 +674,7 @@
+ alertcondition(dowDownEvent, "7. ダウ：下降トレンド入り", "{{ticker}} {{interval}} 確定足: ダウの下降判定へ変化。")
+ alertcondition(dowEndEvent, "8. ダウ：トレンド終了", "{{ticker}} {{interval}} 確定足: トレンド判定がレンジ/未判定へ変化。")
+ 
+-// ───────── 8. 状況パネル（14行） ─────────
++// ───────── 8. 状況パネル（16行・銘柄と基軸通貨を明記） ─────────
+ grpPanel = "7. 表示パネル"
+ showTable = input.bool(true, "状況パネルを表示", group=grpPanel)
+ tablePosIn = input.string("右下", "パネルの位置", options=["右上", "右下", "左下", "中央下"], group=grpPanel)
+@@ -640,7 +685,7 @@
+     "右下" => position.bottom_right
+     "左下" => position.bottom_left
+     => position.bottom_center
+-var table tb = table.new(tablePos, 2, 14, bgcolor=color.new(color.black, 20), border_width=1)
++var table tb = table.new(tablePos, 2, 16, bgcolor=color.new(color.black, 20), border_width=1)
+ 
+ f_row(table panel, int row, string heading, string value, color valueColor, string textSize) =>
+     table.cell(panel, 0, row, heading, text_color=color.white, text_size=textSize, text_halign=text.align_left)
+@@ -694,9 +739,9 @@
+         string rawText = not na(rawTrailPips) ? str.tostring(rawTrailPips, "0.00") + " pips（丸め前）" : "取得不可"
+         string widthText = not na(trailPips) ? f_one(trailPips) + " pips / " + str.tostring(trailDist, "0.000") + "円" : "計算不可（ATR未取得）"
+         string amountText = not na(widthAmountJPY) ? str.tostring(widthAmountJPY, "#,##0.0") + "円・損失上限ではない" : "計算不可"
+-        string spreadText = f_one(manualSpreadPips) + " pips / " + str.tostring(spreadAmountJPY, "#,##0.0") + "円（未実測）"
+-        color spreadColor = manualSpreadPips > spreadWarningPips ? color.orange : color.silver
+-        string notes = "距離目安のみ・自動発注なし"
++        string spreadText = spreadAvailable ? f_one(manualSpreadPips) + " pips / " + str.tostring(spreadAmountJPY, "#,##0.0") + "円（手入力・未実測）" : "未設定（0コストではない）"
++        color spreadColor = not spreadAvailable or spreadAboveBoundary ? color.orange : color.silver
++        string notes = "距離目安のみ・自動発注なし\n幅・ATR倍率・数量は共通入力（未最適化）"
+         color noteColor = color.silver
+         if chartSeconds != atrSeconds
+             notes += "\n判定" + f_tfLabel(timeframe.period) + " / ATR" + f_tfLabel(atrTf) + "は別"
+@@ -704,32 +749,40 @@
+         if not atrAvailable
+             notes += widthMode == "固定pips" ? "\nATR未取得・固定幅のみ表示" : "\nATR未取得・幅候補は使用不可"
+             noteColor := color.orange
+-        if manualSpreadPips > spreadWarningPips
++        if not spreadAvailable
++            notes += "\n" + pairCode + "のSP未設定・発注画面で確認"
++            noteColor := color.orange
++        if spreadAboveBoundary
+             notes += "\n手入力SPが注意境界超過・実測確認"
+             noteColor := color.orange
+-        if not na(trailPips) and trailPips <= manualSpreadPips
++        if spreadAvailable and not na(trailPips) and trailPips <= manualSpreadPips
+             notes += "\n幅候補≦手入力SP・設定再検討"
+             noteColor := color.orange
+         if syminfo.prefix != "FOREXCOM"
+-            notes += "\nFOREXCOMのUSDJPYレートと照合"
++            notes += "\nFOREXCOM:" + pairCode + "のレートと照合"
+             noteColor := color.orange
+ 
+-        f_row(tb, 0, "判定足 / サイン", f_tfLabel(timeframe.period) + " / 終値確定のみ", color.white, panelSize)
+-        f_row(tb, 1, "ダウ理論", dowText, trend == 1 ? upColor : trend == -1 ? dnColor : color.gray, panelSize)
+-        f_row(tb, 2, "エリオット（簡易候補）", elPhase, elColor, panelSize)
+-        f_row(tb, 3, "MAの並び", poText, po == 1 ? upColor : po == -1 ? dnColor : color.gray, panelSize)
+-        f_row(tb, 4, str.tostring(targetMALen) + "MAの傾き", maSlope, isMaRising ? upColor : isMaFalling ? dnColor : color.gray, panelSize)
++        f_row(tb, 0, "銘柄 / 配信元", pairLabel + " / " + syminfo.prefix, color.white, panelSize)
++        f_row(tb, 1, "判定足 / サイン", f_tfLabel(timeframe.period) + " / 終値確定のみ", color.white, panelSize)
++        f_row(tb, 2, "ダウ理論", dowText, trend == 1 ? upColor : trend == -1 ? dnColor : color.gray, panelSize)
++        f_row(tb, 3, "エリオット（簡易候補）", elPhase, elColor, panelSize)
++        f_row(tb, 4, "MAの並び", poText, po == 1 ? upColor : po == -1 ? dnColor : color.gray, panelSize)
++        f_row(tb, 5, str.tostring(targetMALen) + "MAの傾き", maSlope, isMaRising ? upColor : isMaFalling ? dnColor : color.gray, panelSize)
+         string longMaText = na(ma3) ? "計算待ち" : close > ma3 ? "上 / フィルター" + (granFilter ? "ON" : "OFF") : close < ma3 ? "下 / フィルター" + (granFilter ? "ON" : "OFF") : "同値 / フィルター" + (granFilter ? "ON" : "OFF")
+-        f_row(tb, 5, "価格と" + str.tostring(len3) + "MA", longMaText, na(ma3) ? color.gray : close > ma3 ? upColor : close < ma3 ? dnColor : color.gray, panelSize)
+-        f_row(tb, 6, "防衛ライン（注文なし）", lvText, color.white, panelSize)
+-        f_row(tb, 7, "グランビル判定", granState, granColor, panelSize)
+-        f_row(tb, 8, f_tfLabel(atrTf) + " ATR(" + str.tostring(atrLen) + ")", atrText, atrColor, panelSize)
+-        f_row(tb, 9, "ATR×" + f_one(atrMulti), rawText, atrColor, panelSize)
+-        f_row(tb, 10, "幅候補 / " + widthMode, widthText, not na(trailPips) ? color.white : color.orange, panelSize)
+-        f_row(tb, 11, str.tostring(units, "#,##0") + "通貨・値幅換算", amountText, color.white, panelSize)
+-        f_row(tb, 12, "SP参考値（手入力）", spreadText, spreadColor, panelSize)
+-        f_row(tb, 13, "確認事項", notes, noteColor, panelSize)
+-        table.cell_set_tooltip(tb, 1, 8, "ATR取得方式: " + atrRoute + "\n表示は取得元バーの終了時刻です。市場の営業状態や注文可能性は判定していません。")
+-        table.cell_set_tooltip(tb, 1, 10, "切り上げ単位: " + f_one(widthStepPips) + " pips\nブローカーの最小幅・入力単位は別途確認。最高値/最安値追随ではありません。")
++        f_row(tb, 6, "価格と" + str.tostring(len3) + "MA", longMaText, na(ma3) ? color.gray : close > ma3 ? upColor : close < ma3 ? dnColor : color.gray, panelSize)
++        f_row(tb, 7, "防衛ライン（注文なし）", lvText, color.white, panelSize)
++        f_row(tb, 8, "グランビル判定", granState, granColor, panelSize)
++        f_row(tb, 9, f_tfLabel(atrTf) + " ATR(" + str.tostring(atrLen) + ")", atrText, atrColor, panelSize)
++        f_row(tb, 10, "ATR×" + f_one(atrMulti), rawText, atrColor, panelSize)
++        f_row(tb, 11, "幅候補 / " + widthMode, widthText, not na(trailPips) ? color.white : color.orange, panelSize)
++        f_row(tb, 12, "1pip換算 / 参考数量", str.tostring(pipAmountJPY, "#,##0.0") + "円 / " + str.tostring(units, "#,##0") + " " + syminfo.basecurrency, color.white, panelSize)
++        f_row(tb, 13, str.tostring(units, "#,##0") + " " + syminfo.basecurrency + "・値幅換算", amountText, color.white, panelSize)
++        f_row(tb, 14, pairLabel + " SP（手入力）", spreadText, spreadColor, panelSize)
++        f_row(tb, 15, "確認事項", notes, noteColor, panelSize)
++        table.cell_set_tooltip(tb, 1, 9, "ATR取得方式: " + atrRoute + "\n表示は取得元バーの終了時刻です。市場の営業状態や注文可能性は判定していません。")
++        table.cell_set_tooltip(tb, 1, 11, "切り上げ単位: " + f_one(widthStepPips) + " pips\nブローカーの最小幅・入力単位は別途確認。最高値/最安値追随ではありません。")
++        table.cell_set_tooltip(tb, 1, 0, "対象は定義済み6ペア。現在のチャートのみを計算します。他ペアの同時監視、注文口座との銘柄同期は行いません。")
++        table.cell_set_tooltip(tb, 1, 12, "対象6ペアは1pip=0.01円。数量は基軸通貨数です。金額は値幅の換算で、必要証拠金・維持率・損失上限ではありません。")
++        table.cell_set_tooltip(tb, 1, 14, "設定 6A の該当ペアの値と設定済みチェックを使用します。ライブBid/Askは取得しません。別の配信元・時間帯では再確認してください。")
+     else
+-        table.clear(tb, 0, 0, 1, 13)
++        table.clear(tb, 0, 0, 1, 15)

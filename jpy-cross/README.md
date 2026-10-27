@@ -1,10 +1,10 @@
 # FX All-in-One Pro — JPY Cross v1.0.0
 ## Dow + Elliott candidates + Granville + S/R + MA + ATR / fixed-distance reference
 
-作成日：2026年10月26日
-Pine Script：version 6
-ファイル：`FX_AllInOne_JPY_Cross.pine`
-チャート上の短縮名：`JC 1.0.0`
+作成日：2026年10月26日  
+Pine Script：version 6  
+ファイル：`FX_AllInOne_JPY_Cross.pine`  
+チャート上の短縮名：`JC 1.0.0`  
 派生元：`FX_AllInOne_USDJPY_v1_1_1.pine`
 
 **USDJPY専用版とは別ファイル・別バージョンとして作成したクロス円版です。既存のUSDJPY版を上書きしません。**
@@ -343,25 +343,25 @@ Pythonの計算例は小さな条件の参照モデルであり、インジケ�
 
 Pineの言語仕様と公開銘柄情報の確認日：2026年10月26日。以下は戦略・倍率・固定幅の有効性を裏付ける資料ではありません。
 
-[TV1] TradingView — Other timeframes and data
+[TV1] TradingView — Other timeframes and data  
 `https://www.tradingview.com/pine-script-docs/concepts/other-timeframes-and-data/`
 
-[TV3] TradingView — Alerts。作成時の銘柄・時間足・コード・設定が保存される。
+[TV3] TradingView — Alerts。作成時の銘柄・時間足・コード・設定が保存される。  
 `https://www.tradingview.com/pine-script-docs/concepts/alerts/`
 
-[TV8] TradingView — RE10143。描画時の履歴バッファ不足とtimeの個別確保。
+[TV8] TradingView — RE10143。描画時の履歴バッファ不足とtimeの個別確保。  
 `https://www.tradingview.com/pine-script-docs/errors/RE10143/`
 
-[TV11] TradingView — Chart information。基軸通貨・決済通貨・銘柄種別・最小刻み。
+[TV11] TradingView — Chart information。基軸通貨・決済通貨・銘柄種別・最小刻み。  
 `https://www.tradingview.com/pine-script-docs/concepts/chart-information/`
 
-[TV12] TradingView — Inputs。入力、グループ、チェックボックス。
+[TV12] TradingView — Inputs。入力、グループ、チェックボックス。  
 `https://www.tradingview.com/pine-script-docs/concepts/inputs/`
 
-[FX1] FOREX.com日本 — FX銘柄詳細情報。6ペアの掲載と変動スプレッド。
+[FX1] FOREX.com日本 — FX銘柄詳細情報。6ペアの掲載と変動スプレッド。  
 `https://www.forex.com/jp/help-and-support/margin-requirements/`
 
-[FX2] FOREX.com日本 — 証拠金pip計算ツール。対円銘柄の1pip。
+[FX2] FOREX.com日本 — 証拠金pip計算ツール。対円銘柄の1pip。  
 `https://www.forex.com/jp/tradercenter/trading-tools/margin-pip-calculator/`
 
 ## 免責・運用上の位置付け

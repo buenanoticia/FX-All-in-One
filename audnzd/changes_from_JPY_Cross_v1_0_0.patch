@@ -1,0 +1,241 @@
+--- JPY_Cross_v1_0_0.pine
++++ FX_AllInOne_AUDNZD.pine
+@@ -1,36 +1,43 @@
+ //@version=6
+-// FX All-in-One Pro — JPY Cross v1.0.0 / 2026-10-26
+-// Forked from USDJPY v1.1.1. The USDJPY file is not modified.
+-// Supported: EURJPY / GBPJPY / AUDJPY / NZDJPY / CADJPY / CHFJPY.
+-// One chart symbol at a time; not a multi-symbol scanner.
++// FX All-in-One Pro — AUDNZD v1.0.0 / 2026-10-27
++// Standalone fork of JPY Cross v1.0.0 (USDJPY v1.1.1 lineage).
++// Supported pair: AUD/NZD only. Existing releases are not modified.
+ // MA + S/R + Dow + Elliott candidates + Granville candidates + distance reference.
+-// INDICATOR ONLY: no broker orders, no position sync, no actual trailing stop.
++// INDICATOR ONLY: no broker orders, position sync, live spread or actual trailing stop.
++// Money is calculated in NZD, then optionally converted to reference JPY.
++// JPY conversion is a daily TradingView rate OR an explicitly selected manual rate.
+ // Original source: TradingViewAllInOneScript10161026-0030.txt
+-indicator("FX All-in-One Pro JPY Cross v1.0.0", shorttitle="JC 1.0.0", overlay=true, max_lines_count=100, max_labels_count=500, dynamic_requests=true)
+-
+-// v1.1.1: S/Rの過去座標描画は、内部でtime系列の履歴を参照します。
+-// srLookbackの上限4900本（境界を含む）をカバーするため、timeだけを事前確保します。
+-// 全系列の一括拡張や、探索期間・売買条件の変更は行いません。
++indicator("FX All-in-One Pro AUDNZD v1.0.0", shorttitle="AN 1.0.0", overlay=true, max_lines_count=100, max_labels_count=500, dynamic_requests=true)
++
++// USDJPY v1.1.1から継承: S/Rの過去座標描画に必要なtime履歴を事前確保。
++// 探索期間そのものや売買条件を変更するものではありません。
+ max_bars_back(time, 5000)
+ 
+-// 銘柄名の部分一致ではなく、FX種別・基軸通貨・決済通貨で対象を確認。
+-// USDJPYは既存の専用版を使用。非円ペアや未定義のクロス円には適用しない。
+-bool isSupportedBase = syminfo.basecurrency == "EUR" or syminfo.basecurrency == "GBP" or syminfo.basecurrency == "AUD" or syminfo.basecurrency == "NZD" or syminfo.basecurrency == "CAD" or syminfo.basecurrency == "CHF"
+-bool isSupportedCross = syminfo.type == "forex" and syminfo.currency == "JPY" and isSupportedBase
++// 銘柄名の部分一致ではなく、FX種別・基軸通貨・決済通貨を確認。
++bool isTargetPair = syminfo.type == "forex" and syminfo.basecurrency == "AUD" and syminfo.currency == "NZD"
+ if barstate.isfirst
+-    if not isSupportedCross
+-        runtime.error("クロス円版の対象はEURJPY・GBPJPY・AUDJPY・NZDJPY・CADJPY・CHFJPYです。USDJPYは専用版、NOKSEK等は別版が必要です。")
++    if not isTargetPair
++        runtime.error("本版はAUDNZD専用です。FOREXCOM:AUDNZDなどの通常FXチャートを選択してください。USDJPY・クロス円・他ペアは各専用版を使用します。")
+     if not chart.is_standard or timeframe.isticks
+         runtime.error("通常の時間足チャートで使用してください。平均足・レンジ・Renko・ティック足等は対象外です。")
+ 
+ string pairCode = syminfo.basecurrency + syminfo.currency
+ string pairLabel = syminfo.basecurrency + "/" + syminfo.currency
+-// 対象6ペアは1pip=0.01円。mintick（価格の最小刻み）とは区別する。
+-float pipSize = 0.01
++string quoteCurrency = syminfo.currency
++
++// 通常の非円FXのpip単位を初期値にする。mintickとは区別。
++// ブローカーのpips/points表示が異なる場合のみ、仕様を確認して手動変更。
++grpPip = "0. pip単位（注文画面の単位と照合）"
++useManualPip = input.bool(false, "pip単位を手動指定（仕様確認時のみ）", group=grpPip)
++manualPipSize = input.float(0.0001, "手動: 1pipの価格差（決済通貨）", minval=0.000001, maxval=0.01, step=0.00001, group=grpPip, tooltip="AUDNZDの初期値は0.0001 NZDです。価格の最小刻みと1pipは同じとは限りません。変更するとATR・固定幅・SP・金額の全pips換算が変わります。")
++float pipSize = useManualPip ? manualPipSize : 0.0001
+ bool confirmed = barstate.isconfirmed
+ 
+ f_one(float value) =>
+     na(value) ? "取得不可" : str.tostring(value, "0.0")
++
++f_amount(float value) =>
++    na(value) ? "取得不可" : str.tostring(value, "#,##0.00####")
+ 
+ f_tfLabel(simple string tf) =>
+     float seconds = timeframe.in_seconds(tf)
+@@ -541,12 +548,12 @@
+ atrLen = input.int(14, "ATR期間", minval=1, group=grpATR)
+ atrMulti = input.float(2.5, "ATR倍率（独自の検証用設定）", minval=0.5, maxval=10.0, step=0.1, group=grpATR)
+ widthMode = input.string("ATR×倍率", "幅候補の計算方法", options=["ATR×倍率", "固定pips", "ATR×倍率＋下限"], group=grpATR)
+-fixedPips = input.float(20.0, "固定幅（共通入力・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="20.0は計算確認用の初期値で、各ペアの推奨値ではありません。チャートを切り替えてもこの共通入力は自動調整しません。")
+-minPips = input.float(20.0, "下限幅（共通入力・下限モードのみ・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="下限だけで上限はありません。ATRが大きくなると候補幅・換算金額も増えます。ペア別の最適化は行いません。")
++fixedPips = input.float(20.0, "固定幅（pips・未最適化）", minval=0.1, step=0.5, group=grpATR, tooltip="20.0は計算確認用の初期値です。AUDNZDの推奨値ではなく、値動き・コストに合わせて検証が必要です。")
++minPips = input.float(20.0, "下限幅（下限モードのみ・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="下限だけで上限はありません。ATRが大きくなると候補幅・換算金額も増えます。本ペアでの最適化は行っていません。")
+ widthStepPips = input.float(0.1, "幅候補の切り上げ単位（pips）", minval=0.1, maxval=10.0, step=0.1, group=grpATR, tooltip="画面表示と内部計算をそろえます。実際に入力可能な単位・最小幅は注文画面で別途確認してください。")
+ showTrailPlot = input.bool(true, "現在値からの距離目安ドットを表示（追随ストップではない）", group=grpATR)
+-atrLowPips = input.float(3.0, "低ボラ境界（共通入力・pips）", minval=0.1, step=0.5, group=grpATR, tooltip="選択ATRがこの値未満なら低ボラ色。各ペアで検証済みの境界ではありません。時間足・ペアに応じて確認してください。")
+-atrHighPips = input.float(8.0, "高ボラ境界（共通入力・pips）", minval=0.2, step=0.5, group=grpATR, tooltip="選択ATRがこの値以上なら高ボラ色。売買の可否、指標発表の有無は判断しません。")
++atrLowPips = input.float(3.0, "低ボラ境界（pips・未最適化）", minval=0.1, step=0.5, group=grpATR, tooltip="選択ATRがこの値未満なら低ボラ色。本ペアで検証済みの境界ではありません。表示時間足・値動きに応じて確認してください。")
++atrHighPips = input.float(8.0, "高ボラ境界（pips・未最適化）", minval=0.2, step=0.5, group=grpATR, tooltip="選択ATRがこの値以上なら高ボラ色。売買の可否、指標発表の有無は判断しません。")
+ colAtrLow = input.color(color.aqua, "色：低ボラ", group=grpATR, inline="ac")
+ colAtrNorm = input.color(color.lime, "中間", group=grpATR, inline="ac")
+ colAtrHigh = input.color(color.orange, "高ボラ", group=grpATR, inline="ac")
+@@ -613,49 +620,37 @@
+ plot(atrPips, "選択時間足ATR（pips）", color=atrColor, display=display.data_window)
+ 
+ // 手入力値は参考表示にのみ使用し、過去/現在のサインをフィルターしない。
+-// 数量はチャートの基軸通貨の単位。3,000 EURは3,000 USDや3,000円ではない。
+-grpRisk = "6. クロス円の参考金額（口座連携なし）"
+-units = input.int(3000, "数量（共通入力・基軸通貨数。ロット数ではない）", minval=1, group=grpRisk, tooltip="EURJPYならEUR、GBPJPYならGBPの数量として計算します。ペアを切り替えても数値は自動変更しません。必要証拠金・残高・建玉は取得しません。")
+-spreadWarningPips = input.float(0.0, "手入力SPの注意境界（共通・0で判定OFF）", minval=0.0, step=0.1, group=grpRisk, tooltip="独自の比較用の境界です。0は境界判定OFF。入力SPが設定済みかつこの境界超過なら注意を表示します。注文停止やサインの除外はしません。")
+-
+-grpSpread = "6A. ペア別の参考スプレッド（手入力・実測連携なし）"
+-spEURSet = input.bool(false, "EURJPY 設定済み", group=grpSpread, inline="spEUR")
+-spEUR = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spEUR", tooltip="発注画面などで確認した値を手入力し、設定済みにチェックします。OFFの間は未設定として扱い、0コストとは表示しません。")
+-spGBPSet = input.bool(false, "GBPJPY 設定済み", group=grpSpread, inline="spGBP")
+-spGBP = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spGBP")
+-spAUDSet = input.bool(false, "AUDJPY 設定済み", group=grpSpread, inline="spAUD")
+-spAUD = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spAUD")
+-spNZDSet = input.bool(false, "NZDJPY 設定済み", group=grpSpread, inline="spNZD")
+-spNZD = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spNZD")
+-spCADSet = input.bool(false, "CADJPY 設定済み", group=grpSpread, inline="spCAD")
+-spCAD = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spCAD")
+-spCHFSet = input.bool(false, "CHFJPY 設定済み", group=grpSpread, inline="spCHF")
+-spCHF = input.float(0.0, "pips", minval=0.0, step=0.1, group=grpSpread, inline="spCHF")
+-
+-// 現在のチャートに一致する入力だけを選択。別ペアのSPは使い回さない。
+-bool spreadConfigured = switch syminfo.basecurrency
+-    "EUR" => spEURSet
+-    "GBP" => spGBPSet
+-    "AUD" => spAUDSet
+-    "NZD" => spNZDSet
+-    "CAD" => spCADSet
+-    "CHF" => spCHFSet
+-    => false
+-float selectedSpreadPips = switch syminfo.basecurrency
+-    "EUR" => spEUR
+-    "GBP" => spGBP
+-    "AUD" => spAUD
+-    "NZD" => spNZD
+-    "CAD" => spCAD
+-    "CHF" => spCHF
+-    => na
++// 数量は基軸通貨数。3,000 AUDは3,000円や3,000 NZDではない。
++grpRisk = "6. 参考金額（口座連携なし）"
++units = input.int(3000, "参考数量（基軸通貨数。ロット数ではない）", minval=1, group=grpRisk, tooltip="AUDNZDではAUDの数量として計算します。最小発注数量とは無関係な参考入力です。必要証拠金・残高・建玉は取得しません。")
++spreadWarningPips = input.float(0.0, "手入力SPの注意境界（0で判定OFF）", minval=0.0, step=0.1, group=grpRisk, tooltip="独自の比較用の境界です。設定済みSPが境界を超えた場合は注意表示のみ。注文停止やサインの除外はしません。")
++
++grpSpread = "6A. AUDNZDの参考スプレッド（手入力）"
++spreadConfigured = input.bool(false, "AUDNZD SP設定済み", group=grpSpread)
++selectedSpreadPips = input.float(0.0, "参考スプレッド（pips）", minval=0.0, step=0.1, group=grpSpread, tooltip="発注画面で確認したpips値を入力し、設定済みをONにしてください。自動取得も鮮度判定も行いません。OFFは未設定であり、0コストではありません。")
+ float manualSpreadPips = spreadConfigured ? selectedSpreadPips : na
+ bool spreadAvailable = spreadConfigured and not na(manualSpreadPips)
+ bool spreadWarningEnabled = spreadWarningPips > 0
+ bool spreadAboveBoundary = spreadAvailable and spreadWarningEnabled and manualSpreadPips > spreadWarningPips
+-float pipAmountJPY = pipSize * units
+-float widthAmountJPY = not na(trailDist) ? trailDist * units : na
+-float spreadAmountJPY = spreadAvailable ? manualSpreadPips * pipSize * units : na
++
++// 円ではなく、まずチャートの決済通貨（NZD）で計算する。
++float pipAmountQuote = pipSize * units
++float widthAmountQuote = not na(trailDist) ? trailDist * units : na
++float spreadAmountQuote = spreadAvailable ? manualSpreadPips * pipSize * units : na
++
++grpJPY = "6B. 日本円の参考換算（実口座損益ではない）"
++jpyMode = input.string("自動（日次参考）", "円換算の方法", options=["自動（日次参考）", "手入力", "表示しない"], group=grpJPY, tooltip="自動はTradingViewの日次換算レートです。FOREX.comの約定時・決済時換算レートではありません。手入力または表示OFFにも切替可能です。")
++manualJPYRate = input.float(0.0, "手入力: 1 NZD は何円か（円/NZD）", minval=0.0, step=0.01, group=grpJPY, tooltip="例は説明書を参照。逆数（1円が何NZDか）を入れないでください。手入力モードで0は未設定です。自動取得の欠損を黙って手入力値で埋めません。")
++float autoJPYRate = na
++if jpyMode == "自動（日次参考）"
++    autoJPYRate := request.currency_rate(quoteCurrency, "JPY", ignore_invalid_currency=true)
++float quoteToJPY = jpyMode == "自動（日次参考）" ? autoJPYRate : jpyMode == "手入力" and manualJPYRate > 0 ? manualJPYRate : na
++bool jpyEnabled = jpyMode != "表示しない"
++bool jpyAvailable = jpyEnabled and not na(quoteToJPY) and quoteToJPY > 0
++float pipAmountJPY = jpyAvailable ? pipAmountQuote * quoteToJPY : na
++float widthAmountJPY = jpyAvailable and not na(widthAmountQuote) ? widthAmountQuote * quoteToJPY : na
++float spreadAmountJPY = jpyAvailable and spreadAvailable ? spreadAmountQuote * quoteToJPY : na
++// 欠損を0や1で補完しない。円換算が欠損してもNZD金額と分析は継続する。
+ 
+ // ───────── 7. アラート（8種・全条件が表示足の確定時のみ） ─────────
+ // waveCount=3は第4波調整候補なので、第3波推進の一致条件から除く。
+@@ -674,7 +669,7 @@
+ alertcondition(dowDownEvent, "7. ダウ：下降トレンド入り", "{{ticker}} {{interval}} 確定足: ダウの下降判定へ変化。")
+ alertcondition(dowEndEvent, "8. ダウ：トレンド終了", "{{ticker}} {{interval}} 確定足: トレンド判定がレンジ/未判定へ変化。")
+ 
+-// ───────── 8. 状況パネル（16行・銘柄と基軸通貨を明記） ─────────
++// ───────── 8. 状況パネル（19行・決済通貨と参考円換算を区別） ─────────
+ grpPanel = "7. 表示パネル"
+ showTable = input.bool(true, "状況パネルを表示", group=grpPanel)
+ tablePosIn = input.string("右下", "パネルの位置", options=["右上", "右下", "左下", "中央下"], group=grpPanel)
+@@ -685,7 +680,7 @@
+     "右下" => position.bottom_right
+     "左下" => position.bottom_left
+     => position.bottom_center
+-var table tb = table.new(tablePos, 2, 16, bgcolor=color.new(color.black, 20), border_width=1)
++var table tb = table.new(tablePos, 2, 19, bgcolor=color.new(color.black, 20), border_width=1)
+ 
+ f_row(table panel, int row, string heading, string value, color valueColor, string textSize) =>
+     table.cell(panel, 0, row, heading, text_color=color.white, text_size=textSize, text_halign=text.align_left)
+@@ -737,11 +732,17 @@
+         string atrTimeText = not na(atrSourceClose) ? str.format_time(atrSourceClose, "MM/dd HH:mm", "Asia/Tokyo") + " JST" : "終了時刻なし"
+         string atrText = atrAvailable ? f_one(atrPips) + " pips [" + atrStatus + "] / " + atrTimeText : "取得不可/待ち（代用なし）"
+         string rawText = not na(rawTrailPips) ? str.tostring(rawTrailPips, "0.00") + " pips（丸め前）" : "取得不可"
+-        string widthText = not na(trailPips) ? f_one(trailPips) + " pips / " + str.tostring(trailDist, "0.000") + "円" : "計算不可（ATR未取得）"
+-        string amountText = not na(widthAmountJPY) ? str.tostring(widthAmountJPY, "#,##0.0") + "円・損失上限ではない" : "計算不可"
+-        string spreadText = spreadAvailable ? f_one(manualSpreadPips) + " pips / " + str.tostring(spreadAmountJPY, "#,##0.0") + "円（手入力・未実測）" : "未設定（0コストではない）"
++        string widthText = not na(trailPips) ? f_one(trailPips) + " pips / " + str.tostring(trailDist, "0.00000###") + " " + quoteCurrency : "計算不可（ATR未取得）"
++        string amountText = not na(widthAmountQuote) ? f_amount(widthAmountQuote) + " " + quoteCurrency + "・損失上限ではない" : "計算不可"
++        string yenSuffix = jpyAvailable ? " / 約" + str.tostring(pipAmountJPY, "#,##0.00") + "円" : ""
++        string pipText = f_amount(pipAmountQuote) + " " + quoteCurrency + yenSuffix + "\n数量 " + str.tostring(units, "#,##0") + " " + syminfo.basecurrency
++        string yenText = not jpyEnabled ? "円換算OFF" : not jpyAvailable ? "円換算不可（0円ではない）" : not na(widthAmountJPY) ? "約" + str.tostring(widthAmountJPY, "#,##0.00") + "円（参考・実損益ではない）" : "幅未取得"
++        string conversionText = not jpyEnabled ? "円換算OFF" : jpyAvailable ? "1 " + quoteCurrency + " = " + str.tostring(quoteToJPY, "0.0000####") + " JPY / " + jpyMode : jpyMode == "手入力" ? "手入力未設定（正の値が必要）" : "日次レート取得不可（代用なし）"
++        string spreadYen = jpyAvailable and spreadAvailable ? " / 約" + str.tostring(spreadAmountJPY, "#,##0.00") + "円" : ""
++        string spreadText = spreadAvailable ? f_one(manualSpreadPips) + " pips / " + f_amount(spreadAmountQuote) + " " + quoteCurrency + spreadYen + "\n手入力・ライブ未取得" : "未設定（0コストではない）"
++        string pipUnitText = str.tostring(pipSize, "0.0000####") + " " + quoteCurrency + (useManualPip ? " / 手動設定" : " / 初期単位") + "\n最小刻み " + str.tostring(syminfo.mintick, "0.00000###")
+         color spreadColor = not spreadAvailable or spreadAboveBoundary ? color.orange : color.silver
+-        string notes = "距離目安のみ・自動発注なし\n幅・ATR倍率・数量は共通入力（未最適化）"
++        string notes = "距離目安のみ・自動発注なし\n幅・ATR倍率・数量は未最適化"
+         color noteColor = color.silver
+         if chartSeconds != atrSeconds
+             notes += "\n判定" + f_tfLabel(timeframe.period) + " / ATR" + f_tfLabel(atrTf) + "は別"
+@@ -758,6 +759,12 @@
+         if spreadAvailable and not na(trailPips) and trailPips <= manualSpreadPips
+             notes += "\n幅候補≦手入力SP・設定再検討"
+             noteColor := color.orange
++        if jpyEnabled and not jpyAvailable
++            notes += "\n円換算不可・決済通貨額だけを表示"
++            noteColor := color.orange
++        if useManualPip
++            notes += "\npip単位を手動変更中・注文画面と照合"
++            noteColor := color.orange
+         if syminfo.prefix != "FOREXCOM"
+             notes += "\nFOREXCOM:" + pairCode + "のレートと照合"
+             noteColor := color.orange
+@@ -775,14 +782,20 @@
+         f_row(tb, 9, f_tfLabel(atrTf) + " ATR(" + str.tostring(atrLen) + ")", atrText, atrColor, panelSize)
+         f_row(tb, 10, "ATR×" + f_one(atrMulti), rawText, atrColor, panelSize)
+         f_row(tb, 11, "幅候補 / " + widthMode, widthText, not na(trailPips) ? color.white : color.orange, panelSize)
+-        f_row(tb, 12, "1pip換算 / 参考数量", str.tostring(pipAmountJPY, "#,##0.0") + "円 / " + str.tostring(units, "#,##0") + " " + syminfo.basecurrency, color.white, panelSize)
+-        f_row(tb, 13, str.tostring(units, "#,##0") + " " + syminfo.basecurrency + "・値幅換算", amountText, color.white, panelSize)
+-        f_row(tb, 14, pairLabel + " SP（手入力）", spreadText, spreadColor, panelSize)
+-        f_row(tb, 15, "確認事項", notes, noteColor, panelSize)
+-        table.cell_set_tooltip(tb, 1, 9, "ATR取得方式: " + atrRoute + "\n表示は取得元バーの終了時刻です。市場の営業状態や注文可能性は判定していません。")
++        f_row(tb, 12, "1pip金額 / 参考数量", pipText, color.white, panelSize)
++        f_row(tb, 13, str.tostring(units, "#,##0") + " " + syminfo.basecurrency + "・幅換算", amountText, color.white, panelSize)
++        f_row(tb, 14, "幅の参考円換算", yenText, jpyAvailable ? color.white : color.orange, panelSize)
++        f_row(tb, 15, "円換算レート / 方法", conversionText, jpyAvailable ? color.silver : color.orange, panelSize)
++        f_row(tb, 16, pairLabel + " SP（手入力）", spreadText, spreadColor, panelSize)
++        f_row(tb, 17, "1pipの価格差 / 最小刻み", pipUnitText, useManualPip ? color.yellow : color.silver, panelSize)
++        f_row(tb, 18, "確認事項", notes, noteColor, panelSize)
++        table.cell_set_tooltip(tb, 1, 9, "ATR取得方式: " + atrRoute + "\n表示は取得元バーの終了時刻です。市場の営業状態や注文可能性は判定しません。")
+         table.cell_set_tooltip(tb, 1, 11, "切り上げ単位: " + f_one(widthStepPips) + " pips\nブローカーの最小幅・入力単位は別途確認。最高値/最安値追随ではありません。")
+-        table.cell_set_tooltip(tb, 1, 0, "対象は定義済み6ペア。現在のチャートのみを計算します。他ペアの同時監視、注文口座との銘柄同期は行いません。")
+-        table.cell_set_tooltip(tb, 1, 12, "対象6ペアは1pip=0.01円。数量は基軸通貨数です。金額は値幅の換算で、必要証拠金・維持率・損失上限ではありません。")
+-        table.cell_set_tooltip(tb, 1, 14, "設定 6A の該当ペアの値と設定済みチェックを使用します。ライブBid/Askは取得しません。別の配信元・時間帯では再確認してください。")
++        table.cell_set_tooltip(tb, 1, 0, "本ファイルは対象1ペアの通常FXチャート専用です。注文口座との銘柄同期、他ペアの同時監視は行いません。")
++        table.cell_set_tooltip(tb, 1, 12, "数量は基軸通貨数。1pip金額は数量×pip単位で決済通貨建てに計算し、取得できる場合だけ参考円換算します。")
++        table.cell_set_tooltip(tb, 1, 14, "参考金額は幅の換算のみ。実ポジションの損益、必要証拠金、維持率、最大損失ではありません。スプレッド・スワップ・手数料は合算しません。")
++        table.cell_set_tooltip(tb, 1, 15, "自動はrequest.currency_rate()による日次参考値。FOREX.comのリアルタイム換算ではなく、元データ時刻も取得していません。手入力は選択時のみ使用し、過去のレートを再現しません。")
++        table.cell_set_tooltip(tb, 1, 16, "設定6Aの値と設定済みチェックを使用。ライブBid/Askは取得しません。異なる配信元・時間帯では再確認してください。")
++        table.cell_set_tooltip(tb, 1, 17, "初期単位は0.0001。mintickは価格最小刻みであり1pipではありません。手動変更はATR・固定幅・スプレッド・金額の全pips換算に影響します。")
+     else
+-        table.clear(tb, 0, 0, 1, 15)
++        table.clear(tb, 0, 0, 1, 18)

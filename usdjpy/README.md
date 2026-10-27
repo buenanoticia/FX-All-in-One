@@ -1,9 +1,9 @@
 # FX All-in-One Pro — USDJPY v1.1.1
 ## Dow + Elliott candidates + Granville + S/R + MA + ATR / fixed-distance reference
 
-更新日：2026年10月26日
-Pine Script：version 6
-対象：USD/JPYの通常の時間足チャート。利用想定は `FOREXCOM:USDJPY`。
+更新日：2026年10月26日  
+Pine Script：version 6  
+対象：USD/JPYの通常の時間足チャート。利用想定は `FOREXCOM:USDJPY`。  
 元ファイル：`TradingViewAllInOneScript10161026-0030.txt` と `readme20261026-0030.md`
 
 ダウ理論、エリオット波動候補、グランビル候補、サポート・レジスタンス、3本の移動平均線、ATRによる値幅目安を、1本のインジケーターにまとめた分析補助スクリプトです。元の6機能を残し、数値表示、時間足取得、サイン確定条件、説明と実装の不一致を修正しました。
@@ -294,35 +294,35 @@ MAや現在値からの距離線は形成中の足でも動きます。「確定
 
 以下はPineの言語・実行仕様の根拠です。売買戦略やATR倍率の有効性を裏付けるものではありません。確認日：2026年10月26日。
 
-[TV1] TradingView, “Other timeframes and data” — 動的リクエスト、下位足配列、上位足の確定値参照。
+[TV1] TradingView, “Other timeframes and data” — 動的リクエスト、下位足配列、上位足の確定値参照。  
 `https://www.tradingview.com/pine-script-docs/concepts/other-timeframes-and-data/`
 
-[TV2] TradingView, “Bar states” — `barstate.isconfirmed` の意味。
+[TV2] TradingView, “Bar states” — `barstate.isconfirmed` の意味。  
 `https://www.tradingview.com/pine-script-docs/concepts/bar-states/`
 
-[TV3] TradingView, “Alerts” — アラート作成時に保存されるスクリプト等のコピー。
+[TV3] TradingView, “Alerts” — アラート作成時に保存されるスクリプト等のコピー。  
 `https://www.tradingview.com/pine-script-docs/concepts/alerts/`
 
-[TV4] TradingView, “Strings” — `str.tostring()` の数値書式。
+[TV4] TradingView, “Strings” — `str.tostring()` の数値書式。  
 `https://www.tradingview.com/pine-script-docs/concepts/strings/`
 
-[TV5] TradingView, “To Pine Script version 6” — 条件式の遅延評価と、履歴に依存する関数の評価。
+[TV5] TradingView, “To Pine Script version 6” — 条件式の遅延評価と、履歴に依存する関数の評価。  
 `https://www.tradingview.com/pine-script-docs/migration-guides/to-pine-version-6/`
 
-[TV6] TradingView, “Repainting” — ピボット確定後の過去位置表示と、リアルタイム・履歴の差。
+[TV6] TradingView, “Repainting” — ピボット確定後の過去位置表示と、リアルタイム・履歴の差。  
 `https://www.tradingview.com/pine-script-docs/concepts/repainting/`
 
-[TV7] TradingView, “Tables” — セル更新、消去、ツールチップ。
+[TV7] TradingView, “Tables” — セル更新、消去、ツールチップ。  
 `https://www.tradingview.com/pine-script-docs/visuals/tables/`
 
 
-[TV8] TradingView, “RE10143 — The requested historical offset ... / Historical buffer errors in realtime drawings” — バー番号描画と `time` の内部参照、個別バッファ確保。
+[TV8] TradingView, “RE10143 — The requested historical offset ... / Historical buffer errors in realtime drawings” — バー番号描画と `time` の内部参照、個別バッファ確保。  
 `https://www.tradingview.com/pine-script-docs/errors/RE10143/`
 
-[TV9] TradingView, “Execution model / Historical buffers” — ライブ更新では履歴バッファが自動拡張されないという制約。
+[TV9] TradingView, “Execution model / Historical buffers” — ライブ更新では履歴バッファが自動拡張されないという制約。  
 `https://www.tradingview.com/pine-script-docs/language/execution-model/`
 
-[TV10] TradingView, “Declaration statements / max_bars_back” — 全系列の拡張より、対象系列の個別指定を優先する考え方。
+[TV10] TradingView, “Declaration statements / max_bars_back” — 全系列の拡張より、対象系列の個別指定を優先する考え方。  
 `https://www.tradingview.com/pine-script-docs/language/declaration-statements/`
 
 ## 免責事項

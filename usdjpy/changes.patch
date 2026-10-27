@@ -1,0 +1,19 @@
+--- v1.1.0/FX_AllInOne_USDJPY_v1_1_0.pine
++++ v1.1.1/FX_AllInOne_USDJPY_v1_1_1.pine
+@@ -1,9 +1,14 @@
+ //@version=6
+-// FX All-in-One Pro — USDJPY review fixes v1.1.0 / 2026-10-26
++// FX All-in-One Pro — USDJPY review fixes v1.1.1 / 2026-10-26
+ // MA + S/R + Dow + Elliott candidates + Granville candidates + distance reference.
+ // INDICATOR ONLY: no broker orders, no position sync, no actual trailing stop.
+ // Original source: TradingViewAllInOneScript10161026-0030.txt
+-indicator("FX All-in-One Pro USDJPY v1.1.0", shorttitle="AIO UJ 1.1", overlay=true, max_lines_count=100, max_labels_count=500, dynamic_requests=true)
++indicator("FX All-in-One Pro USDJPY v1.1.1", shorttitle="UJ 1.1.1", overlay=true, max_lines_count=100, max_labels_count=500, dynamic_requests=true)
++
++// v1.1.1: S/Rの過去座標描画は、内部でtime系列の履歴を参照します。
++// srLookbackの上限4900本（境界を含む）をカバーするため、timeだけを事前確保します。
++// 全系列の一括拡張や、探索期間・売買条件の変更は行いません。
++max_bars_back(time, 5000)
+ 
+ // この修正版はUSDJPYの通常時間足チャート専用です。
+ bool isUSDJPY = syminfo.type == "forex" and syminfo.basecurrency == "USD" and syminfo.currency == "JPY"

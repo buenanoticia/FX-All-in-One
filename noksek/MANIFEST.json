@@ -1,0 +1,22 @@
+{
+  "release": "NOKSEK v1.0.0",
+  "created": "2026-10-27",
+  "base": "JPY Cross v1.0.0",
+  "base_source_sha256": "8d2540fa0d85ff2654e0600a98357caac50c85e33ad8dd2e165278570eeed813",
+  "unchanged_blocks_sha256": {
+    "analysis": "42617e4f5a5d699f20e2da521578f7a08bc7708d626fa16628e087890e188a0a",
+    "atr_calculation": "6f5e0ea838a3d20b809f769fef47c8e3c9f5211d74081b450aa9a0dc79364ade",
+    "alerts": "fbb268794d060893770329fd43bf150d4fe4abeefc04417d4621c08539b7d406"
+  },
+  "verification": "26 static/Python reference tests; no Pine compile, live data or backtest",
+  "files": {
+    "CHANGELOG.md": "73e0e8d72863bb7216c4a3458873a1215cbfcbba1280b42a3f6fca29e15ebb5d",
+    "FX_AllInOne_NOKSEK.pine": "4d5ae3759497001788ca2f6ba883cd4a01586afe7c6f0e8e905d4c5b4662b12e",
+    "FX_AllInOne_NOKSEK.txt": "4d5ae3759497001788ca2f6ba883cd4a01586afe7c6f0e8e905d4c5b4662b12e",
+    "README.md": "1520e3ea6ed82eef3a83d9b807e73a559aa2e7478b812fcc6f48930e8cff0579",
+    "VALIDATION.md": "2eacf6774e2160b1b0dcdf499ea14c340229610cff96bb89f7e588334f1bb39e",
+    "changes_from_JPY_Cross_v1_0_0.patch": "077dd03be612dac34f8d1d189c5bd4e910ea1fd2cb39123f3c33daa3adfe616b",
+    "tests/test_nonjpy.py": "005338313bf214e0c9502f316e058419ae539d38a863fcac8384411cd35f9261",
+    "tests/test_output.txt": "140c774c15ca97ddbfad005a3a5992a288e8c00911d7dafda435a7cf275cd439"
+  }
+}

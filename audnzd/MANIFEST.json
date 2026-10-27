@@ -1,0 +1,22 @@
+{
+  "release": "AUDNZD v1.0.0",
+  "created": "2026-10-27",
+  "base": "JPY Cross v1.0.0",
+  "base_source_sha256": "8d2540fa0d85ff2654e0600a98357caac50c85e33ad8dd2e165278570eeed813",
+  "unchanged_blocks_sha256": {
+    "analysis": "42617e4f5a5d699f20e2da521578f7a08bc7708d626fa16628e087890e188a0a",
+    "atr_calculation": "6f5e0ea838a3d20b809f769fef47c8e3c9f5211d74081b450aa9a0dc79364ade",
+    "alerts": "fbb268794d060893770329fd43bf150d4fe4abeefc04417d4621c08539b7d406"
+  },
+  "verification": "26 static/Python reference tests; no Pine compile, live data or backtest",
+  "files": {
+    "CHANGELOG.md": "503a81d4a62a78ed01f58455c3af099d8c5c32de0268724ccd80deb8b51f294d",
+    "FX_AllInOne_AUDNZD.pine": "468bb794daf86e85afa62efc767b5976093bf9cd609618759dbd87a3fa1b655d",
+    "FX_AllInOne_AUDNZD.txt": "468bb794daf86e85afa62efc767b5976093bf9cd609618759dbd87a3fa1b655d",
+    "README.md": "ee2a06460e6e565190f6b9d285c8cbb151562c7c94f68a4fec11cb5b6077f653",
+    "VALIDATION.md": "4ca46c4c78c16dd5d330b2b4adf910f2a13bb40a2fd08015cc6b097bf936c903",
+    "changes_from_JPY_Cross_v1_0_0.patch": "229a4f25a900ae23fb83551e66629811c0a7095e13bbca73745dd47010417b17",
+    "tests/test_nonjpy.py": "005338313bf214e0c9502f316e058419ae539d38a863fcac8384411cd35f9261",
+    "tests/test_output.txt": "8998ce07f6cea5578b8292f12a17f600feafcb59ebc62d497eff97b37772e5d6"
+  }
+}

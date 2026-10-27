@@ -1,0 +1,41 @@
+Spreadsheet runtime warmup failed during python startup
+Traceback (most recent call last):
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/patches/warm_spreadsheet_runtime_on_startup.py", line 26, in warm_spreadsheet_runtime_on_startup
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/spreadsheet_warmup.py", line 785, in warm_spreadsheet_runtime
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/spreadsheet_warmup.py", line 718, in _warm_feature_flows
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/spreadsheet_warmup.py", line 509, in _warm_drawing_and_image_flows
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/generated/interface/models.py", line 32861, in bring_to_front
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/rpc/remote.py", line 764, in __call__
+  File "/tmp/tmp.QlpUkOUI9D/artifact_tool_v2-2.8.66/artifact_tool/rpc/client.py", line 175, in call
+artifact_tool.rpc.client.RemoteError: Element ordering requires an owning element collection.
+test_atr_missing_or_zero (test_nonjpy.ReferenceMath.test_atr_missing_or_zero) ... ok
+test_atr_rounding (test_nonjpy.ReferenceMath.test_atr_rounding) ... ok
+test_conversion_modes (test_nonjpy.ReferenceMath.test_conversion_modes) ... ok
+test_fixed_and_floor_modes (test_nonjpy.ReferenceMath.test_fixed_and_floor_modes) ... ok
+test_hypothetical_yen_examples (test_nonjpy.ReferenceMath.test_hypothetical_yen_examples) ... ok
+test_manual_pip_override (test_nonjpy.ReferenceMath.test_manual_pip_override) ... ok
+test_no_silent_fallback (test_nonjpy.ReferenceMath.test_no_silent_fallback) ... ok
+test_no_zero_yen_on_missing (test_nonjpy.ReferenceMath.test_no_zero_yen_on_missing) ... ok
+test_one_pip_quote (test_nonjpy.ReferenceMath.test_one_pip_quote) ... ok
+test_other_widths_quote (test_nonjpy.ReferenceMath.test_other_widths_quote) ... ok
+test_rounded_width_does_not_undershoot (test_nonjpy.ReferenceMath.test_rounded_width_does_not_undershoot) ... ok
+test_spread_cost (test_nonjpy.ReferenceMath.test_spread_cost) ... ok
+test_twenty_pips_quote (test_nonjpy.ReferenceMath.test_twenty_pips_quote) ... ok
+test_alert_hash (test_nonjpy.SourceChecks.test_alert_hash) ... ok
+test_analysis_hash (test_nonjpy.SourceChecks.test_analysis_hash) ... ok
+test_atr_hash (test_nonjpy.SourceChecks.test_atr_hash) ... ok
+test_currency_dimensions (test_nonjpy.SourceChecks.test_currency_dimensions) ... ok
+test_daily_rate_and_missing (test_nonjpy.SourceChecks.test_daily_rate_and_missing) ... ok
+test_delimiters_outside_comments_strings (test_nonjpy.SourceChecks.test_delimiters_outside_comments_strings) ... ok
+test_history_buffer_preserved (test_nonjpy.SourceChecks.test_history_buffer_preserved) ... ok
+test_pip_and_units (test_nonjpy.SourceChecks.test_pip_and_units) ... ok
+test_spread_not_assumed_free (test_nonjpy.SourceChecks.test_spread_not_assumed_free) ... ok
+test_table_bounds (test_nonjpy.SourceChecks.test_table_bounds) ... ok
+test_target_guard (test_nonjpy.SourceChecks.test_target_guard) ... ok
+test_text_copy_and_utf8 (test_nonjpy.SourceChecks.test_text_copy_and_utf8) ... ok
+test_version_and_indicator (test_nonjpy.SourceChecks.test_version_and_indicator) ... ok
+
+----------------------------------------------------------------------
+Ran 26 tests in 0.008s
+
+OK

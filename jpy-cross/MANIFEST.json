@@ -1,0 +1,88 @@
+{
+  "name": "FX All-in-One Pro JPY Cross",
+  "version": "1.0.0",
+  "date": "2026-10-26",
+  "pine_version": 6,
+  "source_file": "FX_AllInOne_JPY_Cross.pine",
+  "shorttitle": "JC 1.0.0",
+  "supported_pairs": [
+    "EURJPY",
+    "GBPJPY",
+    "AUDJPY",
+    "NZDJPY",
+    "CADJPY",
+    "CHFJPY"
+  ],
+  "upstream": {
+    "file": "FX_AllInOne_USDJPY_v1_1_1.pine",
+    "version": "1.1.1",
+    "sha256": "b8460b57285925d79e8abbb47837d9dc5948a1502f768ee894adb95f1cd888e1"
+  },
+  "shared_blocks": {
+    "analysis_core": {
+      "start": "// ───────── 1.",
+      "end": "// ───────── 5.",
+      "sha256": "42617e4f5a5d699f20e2da521578f7a08bc7708d626fa16628e087890e188a0a"
+    },
+    "atr_calculation": {
+      "start": "float atrOnChart =",
+      "end": "// 手入力値は参考表示",
+      "sha256": "6f5e0ea838a3d20b809f769fef47c8e3c9f5211d74081b450aa9a0dc79364ade"
+    },
+    "alerts": {
+      "start": "// ───────── 7. アラート",
+      "end": "// ───────── 8. 状況パネル",
+      "sha256": "fbb268794d060893770329fd43bf150d4fe4abeefc04417d4621c08539b7d406"
+    }
+  },
+  "verification": {
+    "static_and_python_reference_tests": 96,
+    "failures": 0,
+    "tradingview_compile": "not performed",
+    "tradingview_live_cross_pairs": "not performed",
+    "backtest": "not performed",
+    "broker_orders": "not performed"
+  },
+  "files": {
+    "CHANGELOG.md": {
+      "bytes": 3149,
+      "sha256": "7914c09d18e77c6a030c53a9e1b3b14e56e300e62416b8714263386274411d9e"
+    },
+    "FX_AllInOne_JPY_Cross.pine": {
+      "bytes": 48308,
+      "sha256": "8d2540fa0d85ff2654e0600a98357caac50c85e33ad8dd2e165278570eeed813"
+    },
+    "FX_AllInOne_JPY_Cross.txt": {
+      "bytes": 48308,
+      "sha256": "8d2540fa0d85ff2654e0600a98357caac50c85e33ad8dd2e165278570eeed813"
+    },
+    "README.md": {
+      "bytes": 31928,
+      "sha256": "11262170067caf9cb3ee3358b1a2cf01f00df7de6fb9ee78085adb1090da3bad"
+    },
+    "VALIDATION.md": {
+      "bytes": 6916,
+      "sha256": "63d7a15075618d32cd7b8daf6f2ce52a51749fbf6277964eaba0f695a7d7893f"
+    },
+    "changes_from_USDJPY_v1_1_1.patch": {
+      "bytes": 18439,
+      "sha256": "192736b970269de83b908b05b15ac273910b728486124fb471630f9355182888"
+    },
+    "tests/test_history_buffer.py": {
+      "bytes": 4524,
+      "sha256": "d2d07d41961eaf1a8e6122c9d69b9e67de4708e09b9f0fcd94d17dcf5b2bd9b7"
+    },
+    "tests/test_jpy_cross.py": {
+      "bytes": 9066,
+      "sha256": "b8c1bdfbdbf3323192a4e19b319f8c6cd7c699005ddeb63b588cd04e72118d4a"
+    },
+    "tests/test_output.txt": {
+      "bytes": 11305,
+      "sha256": "d638d63288b1a2c53ea517fe2bd68a017f19f3e3fe5acd030d64577824ac54d0"
+    },
+    "tests/test_reference_logic.py": {
+      "bytes": 13666,
+      "sha256": "e58c8edeac8537a9001666c2e8357ad05937da5543f4ef8a2f3631e07f2b04db"
+    }
+  }
+}
